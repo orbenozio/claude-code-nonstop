@@ -33,7 +33,7 @@
 * [x] Phase 1: סקריפט מוזרק webview/night-shift.js
 * [x] בדיקות: 18 יוניט-טסטים + integration מול ה-bundle האמיתי — עוברים
 * [x] README (RTL) + CHANGELOG + bin/README
-* [x] **אימות חי בפאנל:** כפתור 🌕 ON/OFF (ויזואל + מיקום ליד הזרוע)
+* [x] **אימות חי בפאנל:** כפתור ON/OFF (ויזואל + מיקום ליד הזרוע)
 * [x] **אימות חי:** שליחת פינג ל-contenteditable עובדת (execCommand + Enter)
 * [x] **אימות חי:** זיהוי WORKING מבוסס output-growth (אמין, ללא תלות בסלקטורים)
 * [x] **אימות חי:** לולאת פינג חוזרת + עצירת done-sentinel (ספירה, ללא false-positive)

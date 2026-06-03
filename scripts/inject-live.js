@@ -63,4 +63,4 @@ for (const t of targets) {
   const ok = writeAndVerify(t.indexPath, next, (w) => injector.hasValidInjection(w, VERSION));
   console.log(`${ok ? 'INJECTED' : 'INJECT-FAILED'}: ${t.name}  (RTL present: ${detectRtlInjection(next)}, backup: ${path.basename(bp)})`);
 }
-console.log(REMOVE ? 'Done. Reload the Claude Code window.' : 'Done. Reload the Claude Code window to load Nonstop (button: 🌙).');
+console.log(REMOVE ? 'Done. Reload the Claude Code window.' : 'Done. Reload the Claude Code window to load Nonstop (button: ♾️).');
