@@ -104,7 +104,7 @@ function hasValidInjection(content, version) {
 /**
  * Produce the new file content with a single fresh Nonstop block appended.
  * Strips any/all existing Nonstop blocks first (idempotent + de-dupe), and
- * leaves all non-Night-Shift content (e.g. RTL injection) untouched.
+ * leaves all non-Nonstop content (e.g. RTL injection) untouched.
  */
 function inject(content, version, configJson, scriptBody) {
   const clean = stripAllBlocks(content);

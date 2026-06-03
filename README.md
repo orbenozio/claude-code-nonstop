@@ -8,7 +8,7 @@
 
 ל-VS Code אין API להוספת כפתורים לפאנל של Claude Code, ולכן התוסף משתמש בטכניקת **הזרקת webview** מוכחת:
 
-1. בצד ה-host (`src/extension.js`) — מאתר את גרסת Claude Code הפעילה ומצרף את הסקריפט `webview/night-shift.js` לסוף קובץ ה-`webview/index.js` שלה (עם גיבוי וכתיבה אטומית).
+1. בצד ה-host (`src/extension.js`) — מאתר את גרסת Claude Code הפעילה ומצרף את הסקריפט `webview/nonstop.js` לסוף קובץ ה-`webview/index.js` שלה (עם גיבוי וכתיבה אטומית).
 2. הסקריפט המוזרק רץ בתוך ה-DOM של הפאנל: בונה כפתור ב-footer, מזהה מתי Claude ממתין להמשך, ושולח "פינג".
 
 ההזרקה **דו-צדדית מבוססת markers** כדי לחיות בשלום לצד תוסף ה-RTL שמזריק לאותו קובץ.
@@ -34,16 +34,14 @@
 
 | הגדרה | ברירת מחדל | מה |
 | --- | --- | --- |
-| `nightShift.pingText` | `continue` | ההודעה שנשלחת בכל פינג |
-| `nightShift.pingIntervalMs` | `60000` | מרווח מינימלי בין פינגים |
-| `nightShift.maxRuntimeMs` | `28800000` (8ש') | תקרת אורך ריצה (זמן sleep מול rate-limit לא נספר) |
-| `nightShift.maxPings` | `100` | תקרת פינגים |
-| `nightShift.quietHours` | `""` | חלון אופציונלי שבו התוסף משתתק, למשל `09:00-17:00` (בלילה דווקא רץ) |
-| `nightShift.onQuestion` | `stop` | כש-Claude שואל שאלה: `stop` או `answer` |
-| `nightShift.rateLimitFallbackMs` | `18000000` (5ש') | המתנה כשלא ניתן לקבוע זמן איפוס מדויק |
-| `nightShift.debug` | `false` | לוג recon מפורט בקונסול הפאנל |
-
-> הערה: מזהי ההגדרות עדיין בקידומת `nightShift.` (שם הקוד הפנימי); הם יעודכנו ל-`nonstop.` ברינשум הפנימי המלא.
+| `nonstop.pingText` | `continue` | ההודעה שנשלחת בכל פינג |
+| `nonstop.pingIntervalMs` | `60000` | מרווח מינימלי בין פינגים |
+| `nonstop.maxRuntimeMs` | `28800000` (8ש') | תקרת אורך ריצה (זמן sleep מול rate-limit לא נספר) |
+| `nonstop.maxPings` | `100` | תקרת פינגים |
+| `nonstop.quietHours` | `""` | חלון אופציונלי שבו התוסף משתתק, למשל `09:00-17:00` (בלילה דווקא רץ) |
+| `nonstop.onQuestion` | `stop` | כש-Claude שואל שאלה: `stop` או `answer` |
+| `nonstop.rateLimitFallbackMs` | `18000000` (5ש') | המתנה כשלא ניתן לקבוע זמן איפוס מדויק |
+| `nonstop.debug` | `false` | לוג recon מפורט בקונסול הפאנל |
 
 ## בטיחות
 

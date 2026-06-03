@@ -39,9 +39,9 @@ pendingInput.value = state === "waiting_input" // ממתין לקלט/אישור
 * פתרון נתיב: `bin/usage-core-<platform>-<arch>[.exe]` (override דרך config `corePath`).
 * ב-mac/linux צריך להחזיר execute-bit אחרי פריקה מ-VSIX (`chmod 0o755`).
 * יש cache משותף בין חלונות: `usage-cache.json` ב-globalStorage + fetch-lock 25s.
-* ה-binaries בבעלות `orbenozio` (המשתמש) → אריזת עותק ב-Night Shift לגיטימית ואינה יוצרת תלות בתוסף ה-indicator.
+* ה-binaries בבעלות `orbenozio` (המשתמש) → אריזת עותק ב-Nonstop לגיטימית ואינה יוצרת תלות בתוסף ה-indicator.
 
-> **השלכה לאריזה:** לארוז עותק של `bin/usage-core-*` ב-Night Shift (≈6MB/פלטפורמה). לוקאלית נעתיק כרגע את `win32-x64` בלבד כדי להריץ; שאר הפלטפורמות יתווספו בזמן אריזת VSIX. ה-bin/ ב-gitignore (לא מכניסים בינאריים ל-git).
+> **השלכה לאריזה:** לארוז עותק של `bin/usage-core-*` ב-Nonstop (≈6MB/פלטפורמה). לוקאלית נעתיק כרגע את `win32-x64` בלבד כדי להריץ; שאר הפלטפורמות יתווספו בזמן אריזת VSIX. ה-bin/ ב-gitignore (לא מכניסים בינאריים ל-git).
 
 ## 4. מה עדיין דורש אימות חי (לא ניתן סטטית)
 
