@@ -1,0 +1,13 @@
+﻿# Claude / Agents hub — machine-specific junctions, not part of the project
+.claude/
+
+# OS / editor
+Thumbs.db
+.DS_Store
+*.swp
+.vscode/
+
+# Logs / temp
+*.log
+tmp/
+temp/
