@@ -5,6 +5,7 @@
   "version": "0.1.0",
   "publisher": "orbenozio",
   "license": "MIT",
+  "icon": "media/icon.png",
   "repository": {
     "type": "git",
     "url": "https://github.com/orbenozio/claude-code-nonstop.git"

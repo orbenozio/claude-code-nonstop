@@ -14,8 +14,6 @@
 ### Phase 4 — ליטוש ואריזה
 * [ ] הקשחת דו-קיום עם RTL: reinject ב-visibilitychange/focus (לצמצם "זמן מת")
 * [ ] אריזת usage-core לכל הפלטפורמות, VSIX, פרסום למרקטפלייס
-* [ ] שינוי שם התיקייה הפיזית `claude-code-night-shift` → `claude-code-nonstop` (דורש סגירת VS Code + תיקון junctions)
-* [ ] עדכון "Night Shift" בתיעוד היסטורי (SPEC.md / RECON.md)
 * [ ] ריצת לילה אמיתית מקצה-לקצה (≥5 ערבים) + עמידה במטריקות §8.3
 
 ## In progress
@@ -43,3 +41,5 @@
 * [x] **רינשум פנימי מלא** Night Shift → Nonstop (מזהים, markers, localStorage, שם קובץ, אייקון ♾️)
 * [x] **קליק-ימני על הכפתור:** popup הגדרות (אינטרוול/טקסט/שעות-שקט/תקרות) עם labels ברורים
 * [x] git: gh נמצא + הוסף ל-PATH הקבוע (דורש restart ל-VS Code)
+* [x] שינוי שם התיקייה הפיזית → `claude-code-nonstop` (junctions תקינים — מצביעים ל-Agents המרכזי)
+* [x] עדכון "Night Shift" בתיעוד היסטורי (SPEC.md / RECON.md נקיים)
