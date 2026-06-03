@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * Shared constants for Claude Code Night Shift.
+ * Shared constants for Claude Code Nonstop.
  *
  * The injection markers are two-sided (open + close) so the injected block can be
  * located and removed precisely no matter what else (e.g. the RTL extension) is
@@ -9,16 +9,16 @@
  * approach — see SPEC.md §4.2 / §7.
  */
 
-// Open marker carries the version: "// >>> Claude Code Night Shift (injected) v1.2.3 >>>"
-const OPEN_PREFIX = '// >>> Claude Code Night Shift (injected) v';
+// Open marker carries the version: "// >>> Claude Code Nonstop (injected) v1.2.3 >>>"
+const OPEN_PREFIX = '// >>> Claude Code Nonstop (injected) v';
 const OPEN_SUFFIX = ' >>>';
-const CLOSE_MARKER = '// <<< Claude Code Night Shift (injected) <<<';
+const CLOSE_MARKER = '// <<< Claude Code Nonstop (injected) <<<';
 
 // String used to detect the RTL extension's injection so we never clobber it.
 const RTL_MARKER = 'RTL for VS Code Agents';
 
 // Backup file suffix (distinct from RTL's ".backup").
-const BACKUP_SUFFIX = '.nightshift-backup';
+const BACKUP_SUFFIX = '.nonstop-backup';
 
 // Claude Code extension id and directory prefix.
 const CLAUDE_EXTENSION_ID = 'anthropic.claude-code';
@@ -28,7 +28,7 @@ const CLAUDE_DIR_PREFIX = 'anthropic.claude-code-';
 const WEBVIEW_ENTRY = 'webview/index.js';
 
 // Sentinel that Claude is asked to emit when a task is fully complete.
-const DONE_SENTINEL = 'NIGHTSHIFT_DONE';
+const DONE_SENTINEL = 'NONSTOP_DONE';
 
 module.exports = {
   OPEN_PREFIX,

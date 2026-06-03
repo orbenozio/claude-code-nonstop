@@ -14,10 +14,10 @@ const statusBar = require('./statusBar');
 let reinjectTimer = null;
 
 function getConfig() {
-  return vscode.workspace.getConfiguration('nightShift');
+  return vscode.workspace.getConfiguration('nonstop');
 }
 
-/** Build the seed config object passed to the webview via __NIGHTSHIFT_CONFIG__. */
+/** Build the seed config object passed to the webview via __NONSTOP_CONFIG__. */
 function buildSeedConfig() {
   const c = getConfig();
   return {
@@ -39,7 +39,7 @@ function buildSeedConfig() {
 }
 
 function loadWebviewScript(context) {
-  const p = path.join(context.extensionPath, 'webview', 'night-shift.js');
+  const p = path.join(context.extensionPath, 'webview', 'nonstop.js');
   return fs.readFileSync(p, 'utf8');
 }
 
@@ -57,7 +57,7 @@ function ensureBackup(indexPath) {
   }
 }
 
-/** Inject (or refresh) Night Shift into a single target. Returns true if changed. */
+/** Inject (or refresh) Nonstop into a single target. Returns true if changed. */
 function injectTarget(target, version, scriptBody, configJson) {
   let content;
   try {
@@ -78,11 +78,11 @@ function injectTarget(target, version, scriptBody, configJson) {
     { retries: 3, backoffMs: 50 }
   );
   if (!ok) {
-    console.error(`[Night Shift] write race not resolved for ${target.indexPath}`);
+    console.error(`[Nonstop] write race not resolved for ${target.indexPath}`);
   }
   // Touching RTL? We never remove it; just note coexistence for diagnostics.
   if (detectRtlInjection(next)) {
-    console.log('[Night Shift] coexisting with RTL injection in', target.name);
+    console.log('[Nonstop] coexisting with RTL injection in', target.name);
   }
   return ok;
 }
@@ -130,19 +130,19 @@ function scheduleReinject(context) {
   context.subscriptions.push({ dispose: () => clearInterval(reinjectTimer) });
 }
 
-/** Re-inject after a Night Shift version change (refreshes the injected script). */
+/** Re-inject after a Nonstop version change (refreshes the injected script). */
 function handleVersionUpgrade(context) {
   const version = context.extension.packageJSON.version;
-  const stored = context.globalState.get('nightShift.installedVersion');
+  const stored = context.globalState.get('nonstop.installedVersion');
   if (stored && stored !== version) {
     checkAndInject(context, { interactive: false });
   }
-  context.globalState.update('nightShift.installedVersion', version);
+  context.globalState.update('nonstop.installedVersion', version);
 }
 
 function offerReload() {
   vscode.window.showInformationMessage(
-    'Night Shift injected. Reload the Claude Code window (or restart the Extension Host) to load it.',
+    'Nonstop injected. Reload the Claude Code window (or restart the Extension Host) to load it.',
     'Reload Window', 'Restart Extension Host'
   ).then((choice) => {
     if (choice === 'Reload Window') vscode.commands.executeCommand('workbench.action.reloadWindow');
@@ -155,28 +155,28 @@ function activate(context) {
   statusBar.create(vscode, context);
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('nightShift.checkAndInject', () => {
+    vscode.commands.registerCommand('nonstop.checkAndInject', () => {
       const r = checkAndInject(context, { interactive: true });
       if (r.changed > 0) offerReload();
-      else vscode.window.showInformationMessage(`Night Shift: nothing to update (${r.targets} target(s) already current).`);
+      else vscode.window.showInformationMessage(`Nonstop: nothing to update (${r.targets} target(s) already current).`);
     }),
-    vscode.commands.registerCommand('nightShift.removeInjection', () => {
+    vscode.commands.registerCommand('nonstop.removeInjection', () => {
       const n = removeInjection();
-      vscode.window.showInformationMessage(`Night Shift: removed injection from ${n} target(s). Reload to apply.`);
+      vscode.window.showInformationMessage(`Nonstop: removed injection from ${n} target(s). Reload to apply.`);
     }),
-    vscode.commands.registerCommand('nightShift.stopNow', () => {
+    vscode.commands.registerCommand('nonstop.stopNow', () => {
       vscode.window.showWarningMessage(
-        'Night Shift "Stop Now" is best-effort only (no host↔webview channel in MVP). The reliable stop is the OFF button in the Claude panel.'
+        'Nonstop "Stop Now" is best-effort only (no host↔webview channel in MVP). The reliable stop is the OFF button in the Claude panel.'
       );
     }),
-    vscode.commands.registerCommand('nightShift.showMenu', async () => {
+    vscode.commands.registerCommand('nonstop.showMenu', async () => {
       const pick = await vscode.window.showQuickPick(
         [
-          { label: '$(syringe) Check & Inject', cmd: 'nightShift.checkAndInject' },
-          { label: '$(trash) Remove Injection', cmd: 'nightShift.removeInjection' },
-          { label: '$(debug-stop) Stop Now (best effort)', cmd: 'nightShift.stopNow' },
+          { label: '$(syringe) Check & Inject', cmd: 'nonstop.checkAndInject' },
+          { label: '$(trash) Remove Injection', cmd: 'nonstop.removeInjection' },
+          { label: '$(debug-stop) Stop Now (best effort)', cmd: 'nonstop.stopNow' },
         ],
-        { placeHolder: 'Claude Code Night Shift' }
+        { placeHolder: 'Claude Code Nonstop' }
       );
       if (pick) vscode.commands.executeCommand(pick.cmd);
     })
@@ -185,7 +185,7 @@ function activate(context) {
   // Re-inject when relevant settings change (refresh seed config in the injected block).
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration((e) => {
-      if (e.affectsConfiguration('nightShift')) {
+      if (e.affectsConfiguration('nonstop')) {
         checkAndInject(context, { interactive: false });
       }
     })

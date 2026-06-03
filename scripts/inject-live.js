@@ -1,12 +1,12 @@
 'use strict';
 
 /*
- * Inject Night Shift into the live Claude Code install(s).
+ * Inject Nonstop into the live Claude Code install(s).
  * Uses the same host core as the extension (backup + atomic write + verify).
  * Run: node scripts/inject-live.js [--all] [--remove]
  *   default: inject into the newest Claude Code version (with debug ON for tuning)
  *   --all:    inject into every Claude Code install found
- *   --remove: strip Night Shift from all installs and delete our backups
+ *   --remove: strip Nonstop from all installs and delete our backups
  */
 
 const fs = require('fs');
@@ -22,7 +22,7 @@ const VERSION = require('../package.json').version;
 const REMOVE = process.argv.includes('--remove');
 const ALL = process.argv.includes('--all');
 
-const scriptBody = fs.readFileSync(path.join(__dirname, '..', 'webview', 'night-shift.js'), 'utf8');
+const scriptBody = fs.readFileSync(path.join(__dirname, '..', 'webview', 'nonstop.js'), 'utf8');
 const seed = {
   pingText: 'continue',
   pingIntervalMs: 60000,   // real-use cadence
@@ -37,7 +37,7 @@ const seed = {
   rateLimitFallbackMs: 18000000,
   userActivityPauseMs: 120000,
   debug: false,           // set true to re-enable the console heartbeat for tuning
-  doneSentinel: 'NIGHTSHIFT_DONE',
+  doneSentinel: 'NONSTOP_DONE',
 };
 const cfgJson = JSON.stringify(seed);
 
@@ -63,4 +63,4 @@ for (const t of targets) {
   const ok = writeAndVerify(t.indexPath, next, (w) => injector.hasValidInjection(w, VERSION));
   console.log(`${ok ? 'INJECTED' : 'INJECT-FAILED'}: ${t.name}  (RTL present: ${detectRtlInjection(next)}, backup: ${path.basename(bp)})`);
 }
-console.log(REMOVE ? 'Done. Reload the Claude Code window.' : 'Done. Reload the Claude Code window to load Night Shift (button: 🌙).');
+console.log(REMOVE ? 'Done. Reload the Claude Code window.' : 'Done. Reload the Claude Code window to load Nonstop (button: 🌙).');

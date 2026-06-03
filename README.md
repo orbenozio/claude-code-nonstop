@@ -38,7 +38,7 @@
 | `nightShift.pingIntervalMs` | `60000` | מרווח מינימלי בין פינגים |
 | `nightShift.maxRuntimeMs` | `28800000` (8ש') | תקרת אורך ריצה (זמן sleep מול rate-limit לא נספר) |
 | `nightShift.maxPings` | `100` | תקרת פינגים |
-| `nightShift.quietHours` | `""` | חלון ללא פינג, למשל `23:00-07:00` |
+| `nightShift.quietHours` | `""` | חלון אופציונלי שבו התוסף משתתק, למשל `09:00-17:00` (בלילה דווקא רץ) |
 | `nightShift.onQuestion` | `stop` | כש-Claude שואל שאלה: `stop` או `answer` |
 | `nightShift.rateLimitFallbackMs` | `18000000` (5ש') | המתנה כשלא ניתן לקבוע זמן איפוס מדויק |
 | `nightShift.debug` | `false` | לוג recon מפורט בקונסול הפאנל |

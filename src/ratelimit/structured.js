@@ -9,7 +9,7 @@ const { execFile } = require('child_process');
  *
  * Runs the binary with NO arguments (it self-resolves the token from Claude Code's
  * credentials) and parses its JSON stdout. Mirrors the mechanism used by the user's
- * own claude-code-usage-indicator, but with a BUNDLED copy so Night Shift has no
+ * own claude-code-usage-indicator, but with a BUNDLED copy so Nonstop has no
  * dependency on that extension being installed (SPEC.md §4.6, RECON.md §3).
  *
  * NOTE (architecture): this runs in the Extension Host (Node), not the webview.

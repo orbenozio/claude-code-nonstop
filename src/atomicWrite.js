@@ -11,7 +11,7 @@ const path = require('path');
  */
 function writeAtomic(filePath, content) {
   const dir = path.dirname(filePath);
-  const tmp = path.join(dir, `.nightshift-tmp-${process.pid}-${Date.now()}`);
+  const tmp = path.join(dir, `.nonstop-tmp-${process.pid}-${Date.now()}`);
   fs.writeFileSync(tmp, content, 'utf8');
   try {
     fs.renameSync(tmp, filePath);

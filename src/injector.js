@@ -3,7 +3,7 @@
 /**
  * Position-based, two-sided-marker injection logic.
  *
- * Unlike RTL (which slices from its marker to end-of-file), Night Shift wraps its
+ * Unlike RTL (which slices from its marker to end-of-file), Nonstop wraps its
  * injected block in matching open/close markers and only ever removes the text
  * *between and including* a marker pair. This lets two extensions coexist in the
  * same file, and lets us clean up "fossilized" leftovers that another extension's
@@ -19,7 +19,7 @@ const {
 } = require('./constants');
 
 /**
- * Find every Night Shift block in `content`.
+ * Find every Nonstop block in `content`.
  * Returns an array of { start, end, version } where [start, end) spans the whole
  * block including both markers. Handles multiple/duplicate blocks (defensive).
  */
@@ -53,7 +53,7 @@ function findBlocks(content) {
 }
 
 /**
- * Remove ALL Night Shift blocks from `content` (including duplicates/leftovers),
+ * Remove ALL Nonstop blocks from `content` (including duplicates/leftovers),
  * collapsing any surrounding blank lines left behind. Returns cleaned content.
  */
 function stripAllBlocks(content) {
@@ -86,7 +86,7 @@ function stripAllBlocks(content) {
  */
 function buildBlock(version, configJson, scriptBody) {
   const open = `${OPEN_PREFIX}${version}${OPEN_SUFFIX}`;
-  const configLine = `window.__NIGHTSHIFT_CONFIG__ = JSON.parse(${JSON.stringify(configJson)});`;
+  const configLine = `window.__NONSTOP_CONFIG__ = JSON.parse(${JSON.stringify(configJson)});`;
   return `${open}\n${configLine}\n${scriptBody}\n${CLOSE_MARKER}`;
 }
 
@@ -102,8 +102,8 @@ function hasValidInjection(content, version) {
 }
 
 /**
- * Produce the new file content with a single fresh Night Shift block appended.
- * Strips any/all existing Night Shift blocks first (idempotent + de-dupe), and
+ * Produce the new file content with a single fresh Nonstop block appended.
+ * Strips any/all existing Nonstop blocks first (idempotent + de-dupe), and
  * leaves all non-Night-Shift content (e.g. RTL injection) untouched.
  */
 function inject(content, version, configJson, scriptBody) {

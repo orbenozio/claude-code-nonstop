@@ -55,7 +55,7 @@ test('RTL injection AFTER our block survives our strip/reinject', () => {
   // Re-inject (e.g. settings change): our block refreshed, RTL untouched.
   const re = injector.inject(out, V, CFGJSON, SCRIPT);
   assert.ok(detectRtlInjection(re), 'RTL must still be present');
-  assert.strictEqual(injector.findBlocks(re).length, 1, 'one Night Shift block');
+  assert.strictEqual(injector.findBlocks(re).length, 1, 'one Nonstop block');
 });
 
 test('RTL injection BEFORE our block is preserved', () => {
@@ -65,7 +65,7 @@ test('RTL injection BEFORE our block is preserved', () => {
   assert.strictEqual(injector.findBlocks(out).length, 1);
 });
 
-test('fossilized duplicate Night Shift blocks are normalized to one', () => {
+test('fossilized duplicate Nonstop blocks are normalized to one', () => {
   let out = injector.inject('base', V, CFGJSON, SCRIPT);
   // Simulate a leftover older block (e.g. from an RTL restore that re-introduced it).
   const dup = injector.buildBlock('0.0.9', CFGJSON, SCRIPT);
@@ -77,7 +77,7 @@ test('fossilized duplicate Night Shift blocks are normalized to one', () => {
 });
 
 test('malformed block (open without close) is cleaned up', () => {
-  const malformed = 'base\n// >>> Claude Code Night Shift (injected) v0.0.1 >>>\norphan();';
+  const malformed = 'base\n// >>> Claude Code Nonstop (injected) v0.0.1 >>>\norphan();';
   const blocks = injector.findBlocks(malformed);
   assert.strictEqual(blocks.length, 1);
   assert.ok(blocks[0].malformed);

@@ -1,10 +1,10 @@
-// Claude Code Night Shift — injected webview script.
+// Claude Code Nonstop — injected webview script.
 // Runs inside the Claude Code panel DOM (appended to webview/index.js by the host).
 // Wrapped in an IIFE so it never pollutes Claude's globals.
 (function () {
   'use strict';
 
-  // ── Config (seeded from the host via __NIGHTSHIFT_CONFIG__) ──────────────────
+  // ── Config (seeded from the host via __NONSTOP_CONFIG__) ──────────────────
   var DEFAULTS = {
     pingText: 'continue',
     pingIntervalMs: 60000,
@@ -19,29 +19,50 @@
     rateLimitFallbackMs: 18000000,
     userActivityPauseMs: 120000,
     debug: false,
-    doneSentinel: 'NIGHTSHIFT_DONE',
+    doneSentinel: 'NONSTOP_DONE',
   };
-  var CFG = Object.assign({}, DEFAULTS, (window.__NIGHTSHIFT_CONFIG__ || {}));
+  var CFG = Object.assign({}, DEFAULTS, (window.__NONSTOP_CONFIG__ || {}));
 
   // Guard against double-injection in the same document.
-  if (window.__NIGHTSHIFT_ACTIVE__) return;
-  window.__NIGHTSHIFT_ACTIVE__ = true;
+  if (window.__NONSTOP_ACTIVE__) return;
+  window.__NONSTOP_ACTIVE__ = true;
+
+  // Live config: a value set via the right-click popup (localStorage override)
+  // takes precedence over the seed config. Read fresh each time so changes apply
+  // without a reload.
+  var OV_PREFIX = 'nonstop-ov-';
+  function liveCfg(key) {
+    try {
+      var v = localStorage.getItem(OV_PREFIX + key);
+      if (v !== null && v !== '') {
+        if (typeof CFG[key] === 'number') { var n = parseFloat(v); return isNaN(n) ? CFG[key] : n; }
+        return v;
+      }
+    } catch (e) {}
+    return CFG[key];
+  }
+  function setOverride(key, value) {
+    try {
+      if (value === null || value === '') localStorage.removeItem(OV_PREFIX + key);
+      else localStorage.setItem(OV_PREFIX + key, String(value));
+    } catch (e) {}
+  }
 
   function log() {
     if (!CFG.debug) return;
     var args = Array.prototype.slice.call(arguments);
-    args.unshift('[NightShift]');
+    args.unshift('[Nonstop]');
     console.log.apply(console, args);
   }
 
   // ── localStorage state (survives reload; source of truth at runtime) ─────────
   var LS = {
-    enabled: 'nightshift-enabled',
-    sleepUntil: 'nightshift-sleep-until',
-    sessionStart: 'nightshift-session-start',
-    pingCount: 'nightshift-ping-count',
-    ownerId: 'nightshift-owner-id',
-    sleptAccum: 'nightshift-slept-accum-ms',
+    enabled: 'nonstop-enabled',
+    sleepUntil: 'nonstop-sleep-until',
+    sessionStart: 'nonstop-session-start',
+    pingCount: 'nonstop-ping-count',
+    ownerId: 'nonstop-owner-id',
+    sleptAccum: 'nonstop-slept-accum-ms',
   };
   function lsGet(k, d) { try { var v = localStorage.getItem(k); return v === null ? d : v; } catch (e) { return d; } }
   function lsSet(k, v) { try { localStorage.setItem(k, String(v)); } catch (e) {} }
@@ -226,10 +247,11 @@
   }
 
   function buildPingText() {
+    var txt = liveCfg('pingText');
     if (CFG.sentinelDoneDetection) {
-      return CFG.pingText + '\n\n(If the task is fully complete, reply with exactly: ' + CFG.doneSentinel + ')';
+      return txt + '\n\n(If the task is fully complete, reply with exactly: ' + CFG.doneSentinel + ')';
     }
-    return CFG.pingText;
+    return txt;
   }
 
   // ── Shift lifecycle ──────────────────────────────────────────────────────────
@@ -256,17 +278,19 @@
 
   // Backstops (kill-switch lives here in the webview; SPEC §8.1).
   function runtimeExceeded() {
-    if (!CFG.maxRuntimeMs) return false;
+    var max = liveCfg('maxRuntimeMs');
+    if (!max) return false;
     var start = lsNum(LS.sessionStart, Date.now());
     var slept = lsNum(LS.sleptAccum, 0); // rate-limit sleep doesn't count
-    return (Date.now() - start - slept) >= CFG.maxRuntimeMs;
+    return (Date.now() - start - slept) >= max;
   }
   function pingsExceeded() {
-    return CFG.maxPings > 0 && lsNum(LS.pingCount, 0) >= CFG.maxPings;
+    var max = liveCfg('maxPings');
+    return max > 0 && lsNum(LS.pingCount, 0) >= max;
   }
 
   function inQuietHours() {
-    var q = (CFG.quietHours || '').trim();
+    var q = (liveCfg('quietHours') || '').trim();
     if (!q) return false;
     var m = q.match(/^(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})$/);
     if (!m) return false;
@@ -357,7 +381,7 @@
     if (state === 'WAITING_CONTINUE') {
       // Act only at PING cadence — not every poll (counting stall per-poll wrongly
       // declared "done" within seconds and never pinged).
-      if ((Date.now() - lastPingAt) < CFG.pingIntervalMs) return;
+      if ((Date.now() - lastPingAt) < liveCfg('pingIntervalMs')) return;
 
       // Done heuristic: did output change since our previous ping? Only meaningful
       // once we've actually pinged at least once (lastPingSig !== null).
@@ -421,36 +445,126 @@
   }
 
   // ── The ON/OFF button ─────────────────────────────────────────────────────────
+  // ── Right-click settings popup ───────────────────────────────────────────────
+  function closeSettingsPopup() {
+    var p = document.getElementById('nonstop-settings');
+    if (p) { if (p._cleanup) p._cleanup(); p.remove(); }
+  }
+  function showSettingsPopup(e) {
+    closeSettingsPopup();
+    var pop = document.createElement('div');
+    pop.id = 'nonstop-settings';
+    pop.style.cssText = 'position:fixed;z-index:999999;background:var(--vscode-editorWidget-background,#252526);' +
+      'color:var(--vscode-editorWidget-foreground,#ccc);border:1px solid var(--vscode-editorWidget-border,#454545);' +
+      'border-radius:6px;padding:10px;font-size:12px;box-shadow:0 4px 16px rgba(0,0,0,.4);min-width:240px;direction:ltr;';
+    var x = Math.min(e.clientX, window.innerWidth - 270);
+    var y = Math.min(e.clientY, window.innerHeight - 260);
+    pop.style.left = Math.max(8, x) + 'px';
+    pop.style.top = Math.max(8, y) + 'px';
+
+    function row(label, inputEl) {
+      var r = document.createElement('div');
+      r.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:8px;margin:4px 0;';
+      var l = document.createElement('span'); l.textContent = label; l.style.whiteSpace = 'nowrap';
+      r.appendChild(l); r.appendChild(inputEl); pop.appendChild(r);
+    }
+    function mkInput(type, val, w) {
+      var i = document.createElement('input'); i.type = type; i.value = val;
+      i.style.cssText = 'width:' + (w || 70) + 'px;background:var(--vscode-input-background,#3c3c3c);' +
+        'color:inherit;border:1px solid var(--vscode-input-border,#555);border-radius:3px;padding:2px 4px;';
+      return i;
+    }
+
+    var title = document.createElement('div');
+    title.textContent = '♾️ Nonstop'; title.style.cssText = 'font-weight:bold;margin-bottom:2px;';
+    pop.appendChild(title);
+    var hint = document.createElement('div');
+    hint.textContent = 'Auto-sends a message to keep Claude going, and waits out usage limits.';
+    hint.style.cssText = 'opacity:.7;margin-bottom:8px;line-height:1.3;';
+    pop.appendChild(hint);
+
+    var interval = mkInput('number', Math.round(liveCfg('pingIntervalMs') / 1000));
+    interval.min = 15;
+    interval.title = 'How often to send the "keep going" message when Claude is idle.';
+    interval.onchange = function () { setOverride('pingIntervalMs', Math.max(15, parseInt(interval.value, 10) || 60) * 1000); };
+    row('Send a message every (sec)', interval);
+
+    var ptext = mkInput('text', liveCfg('pingText'), 130);
+    ptext.title = 'The text sent to Claude to continue (e.g. "continue").';
+    ptext.onchange = function () { setOverride('pingText', ptext.value); };
+    row('Message to send', ptext);
+
+    var quiet = mkInput('text', liveCfg('quietHours') || '', 95);
+    quiet.placeholder = '09:00-17:00';
+    quiet.title = 'Optional. A window when Nonstop pauses and sends nothing — e.g. your work hours. Leave empty to run anytime, including overnight.';
+    quiet.onchange = function () { setOverride('quietHours', quiet.value); };
+    row('Pause during (optional)', quiet);
+
+    var mp = mkInput('number', liveCfg('maxPings'));
+    mp.title = 'Stop automatically after this many messages. 0 = no limit.';
+    mp.onchange = function () { setOverride('maxPings', Math.max(0, parseInt(mp.value, 10) || 0)); };
+    row('Stop after N messages (0=off)', mp);
+
+    var mr = mkInput('number', Math.round(liveCfg('maxRuntimeMs') / 60000));
+    mr.title = 'Stop automatically after running this long. 0 = no limit.';
+    mr.onchange = function () { setOverride('maxRuntimeMs', Math.max(0, parseInt(mr.value, 10) || 0) * 60000); };
+    row('Stop after (minutes, 0=off)', mr);
+
+    var reset = document.createElement('button');
+    reset.textContent = 'Reset to defaults';
+    reset.style.cssText = 'margin-top:8px;width:100%;cursor:pointer;background:var(--vscode-button-secondaryBackground,#3a3d41);' +
+      'color:var(--vscode-button-secondaryForeground,#ccc);border:none;border-radius:3px;padding:4px;';
+    reset.onclick = function () {
+      ['pingIntervalMs', 'pingText', 'quietHours', 'maxPings', 'maxRuntimeMs'].forEach(function (k) { setOverride(k, null); });
+      closeSettingsPopup();
+    };
+    pop.appendChild(reset);
+
+    document.body.appendChild(pop);
+
+    function outside(ev) { if (!pop.contains(ev.target)) closeSettingsPopup(); }
+    function esc(ev) { if (ev.key === 'Escape') closeSettingsPopup(); }
+    pop._cleanup = function () {
+      document.removeEventListener('mousedown', outside, true);
+      document.removeEventListener('keydown', esc, true);
+    };
+    setTimeout(function () {
+      document.addEventListener('mousedown', outside, true);
+      document.addEventListener('keydown', esc, true);
+    }, 0);
+  }
+
   function ensureStyle() {
-    if (document.getElementById('nightshift-style')) return;
+    if (document.getElementById('nonstop-style')) return;
     var st = document.createElement('style');
-    st.id = 'nightshift-style';
+    st.id = 'nonstop-style';
     st.textContent =
       // OFF: greyed out & dim (like the YOLO arm when off).
-      '#nightshift-btn{background:transparent;border:none;cursor:pointer;font-size:15px;' +
+      '#nonstop-btn{background:transparent;border:none;cursor:pointer;font-size:15px;' +
       'padding:2px 6px;line-height:1;vertical-align:middle;' +
       'filter:grayscale(1) brightness(0.85);opacity:0.5;transition:opacity .15s,filter .15s;}' +
-      '#nightshift-btn:hover{opacity:0.8;}' +
+      '#nonstop-btn:hover{opacity:0.8;}' +
       // ON: full colour + glow + gentle pulse.
-      '#nightshift-btn.ns-on{filter:none;opacity:1;animation:ns-pulse 1.8s ease-in-out infinite;}' +
+      '#nonstop-btn.ns-on{filter:none;opacity:1;animation:ns-pulse 1.8s ease-in-out infinite;}' +
       '@keyframes ns-pulse{0%,100%{transform:scale(1);filter:drop-shadow(0 0 0 transparent)}' +
       '50%{transform:scale(1.15);filter:drop-shadow(0 0 5px gold)}}';
     document.head.appendChild(st);
   }
 
   function injectButton() {
-    if (document.getElementById('nightshift-btn')) return;
+    if (document.getElementById('nonstop-btn')) return;
     var footer = $(SIGNALS.footer);
     if (!footer) return;
     ensureStyle();
 
     var btn = document.createElement('button');
-    btn.id = 'nightshift-btn';
+    btn.id = 'nonstop-btn';
     btn.type = 'button';
-    btn.title = 'Night Shift: keep Claude working (ping + wait out rate limits)';
-    btn.textContent = '🌕';
+    btn.title = 'Nonstop: keep Claude working (ping + wait out rate limits)';
+    btn.textContent = '♾️';
     btn.addEventListener('mousedown', function (e) { e.preventDefault(); });
     btn.addEventListener('click', function (e) { e.preventDefault(); e.stopPropagation(); toggleShift(); });
+    btn.addEventListener('contextmenu', function (e) { e.preventDefault(); e.stopPropagation(); showSettingsPopup(e); });
 
     // Prefer to sit right next to the RTL button group (the YOLO arm) as a sibling,
     // so it survives RTL re-rendering its own <nav>. Fall back to before the primary
@@ -467,11 +581,11 @@
     log('button injected next to', rtlNav ? 'RTL nav' : 'footer primary');
   }
   function updateButton() {
-    var btn = document.getElementById('nightshift-btn');
+    var btn = document.getElementById('nonstop-btn');
     if (!btn) return;
     var on = isEnabled() && isOwner();
     btn.classList.toggle('ns-on', on);
-    btn.title = on ? 'Night Shift: ON (click to stop)' : 'Night Shift: OFF (click to start)';
+    btn.title = on ? 'Nonstop: ON (click to stop)' : 'Nonstop: OFF (click to start)';
   }
 
   // ── Boot ───────────────────────────────────────────────────────────────────────
@@ -487,17 +601,17 @@
   if (CFG.debug) {
     setInterval(function () {
       try {
-        console.log('[NightShift] heartbeat — state:', detectState(),
+        console.log('[Nonstop] heartbeat — state:', detectState(),
           '| streaming:', isStreaming(), '| enabled:', isEnabled(),
           '| inputEmpty:', inputText() === '', '| len:', panelLen());
       } catch (e) {
-        console.log('[NightShift] heartbeat error:', e && e.message);
+        console.log('[Nonstop] heartbeat error:', e && e.message);
       }
     }, 3000);
   }
 
   // Recon/debug handle for live tuning (only does anything in debug mode).
-  window.__nightShiftDebug = {
+  window.__nonstopDebug = {
     state: detectState,
     rateLimit: detectRateLimit,
     input: getInput,

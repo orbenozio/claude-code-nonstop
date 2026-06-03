@@ -3,7 +3,7 @@
 /*
  * Safe end-to-end integration test against a COPY of the real Claude Code bundle.
  * Reads the live index.js read-only, runs the full inject/strip pipeline on a copy,
- * and asserts the output is valid JavaScript, has exactly one Night Shift block,
+ * and asserts the output is valid JavaScript, has exactly one Nonstop block,
  * and preserves any RTL injection. The user's real install is never modified.
  *
  * Usage: node test/integration-real.js "<path-to-claude index.js>"
@@ -25,7 +25,7 @@ if (!indexPath || !fs.existsSync(indexPath)) {
 
 const original = fs.readFileSync(indexPath, 'utf8');
 const hadRtl = detectRtlInjection(original);
-const scriptBody = fs.readFileSync(path.join(__dirname, '..', 'webview', 'night-shift.js'), 'utf8');
+const scriptBody = fs.readFileSync(path.join(__dirname, '..', 'webview', 'nonstop.js'), 'utf8');
 const cfgJson = JSON.stringify({ pingText: 'continue', debug: false });
 const V = '0.1.0';
 
@@ -47,7 +47,7 @@ console.log('  source:', indexPath, '| RTL present:', hadRtl, '| size:', origina
 const injected = injector.inject(original, V, cfgJson, scriptBody);
 fs.writeFileSync(copyPath, injected, 'utf8');
 check('injected output is valid JS (node --check)', nodeCheck(copyPath));
-check('exactly one Night Shift block', injector.findBlocks(injected).length === 1);
+check('exactly one Nonstop block', injector.findBlocks(injected).length === 1);
 check('injection valid for version', injector.hasValidInjection(injected, V));
 check('RTL preserved (if it was present)', hadRtl ? detectRtlInjection(injected) : true);
 

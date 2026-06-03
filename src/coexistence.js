@@ -8,12 +8,12 @@ const { RTL_MARKER } = require('./constants');
  *
  * Verified facts about RTL (from its source):
  *  - It appends its script to webview/index.js with the marker "RTL for VS Code Agents"
- *    and keeps a backup named "index.js.backup" (we use ".nightshift-backup").
- *  - Its restore slices from its marker to end-of-file, so a Night Shift block placed
+ *    and keeps a backup named "index.js.backup" (we use ".nonstop-backup").
+ *  - Its restore slices from its marker to end-of-file, so a Nonstop block placed
  *    AFTER the RTL marker would be deleted by an RTL restore — our periodic reinject
  *    plus position-based idempotency recovers from this.
  *  - It also injects into the sibling extension.js (marker "RTL-Plan-Injection").
- *    Night Shift NEVER touches extension.js, so there is no conflict there.
+ *    Nonstop NEVER touches extension.js, so there is no conflict there.
  */
 
 /** True if RTL has injected into this content. */
