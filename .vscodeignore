@@ -1,0 +1,15 @@
+# Dev-only files — keep them out of the published VSIX.
+.git/**
+.gitignore
+.vscodeignore
+.claude/**
+SPEC.md
+RECON.md
+TASKS.md
+test/**
+scripts/**
+*.vsix
+
+# usage-core binaries are not wired up yet (no host<->webview channel in MVP);
+# bundle them here once the structured rate-limit source is connected.
+bin/usage-core-*

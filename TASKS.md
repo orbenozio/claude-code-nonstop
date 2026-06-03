@@ -14,11 +14,13 @@
 ### Phase 4 — ליטוש ואריזה
 * [ ] הקשחת דו-קיום עם RTL: reinject ב-visibilitychange/focus (לצמצם "זמן מת")
 * [ ] אריזת usage-core לכל הפלטפורמות, VSIX, פרסום למרקטפלייס
+* [ ] שינוי שם התיקייה הפיזית `claude-code-night-shift` → `claude-code-nonstop` (דורש סגירת VS Code + תיקון junctions)
+* [ ] עדכון "Night Shift" בתיעוד היסטורי (SPEC.md / RECON.md)
 * [ ] ריצת לילה אמיתית מקצה-לקצה (≥5 ערבים) + עמידה במטריקות §8.3
 
 ## In progress
 
-* [ ] גרסת שימוש מוזרקת (60ש', debug כבוי) — מוכנה לניסיון לילי ראשון
+* [ ] גרסת שימוש מוזרקת (Nonstop, ♾️, 60ש', debug כבוי) — מוכנה לניסיון אמיתי
 
 ## Done
 
@@ -37,3 +39,7 @@
 * [x] **אימות חי:** לולאת פינג חוזרת + עצירת done-sentinel (ספירה, ללא false-positive)
 * [x] **אימות חי:** דו-קיום עם RTL (ההזרקה נשמרת זה לצד זה)
 * [x] תיקוני באגים מהאימות: stall per-ping, sentinel-count, user-activity scoped-to-input
+* [x] **רברנדינג ל-Nonstop:** repo פרטי github.com/orbenozio/claude-code-nonstop + LICENSE
+* [x] **רינשум פנימי מלא** Night Shift → Nonstop (מזהים, markers, localStorage, שם קובץ, אייקון ♾️)
+* [x] **קליק-ימני על הכפתור:** popup הגדרות (אינטרוול/טקסט/שעות-שקט/תקרות) עם labels ברורים
+* [x] git: gh נמצא + הוסף ל-PATH הקבוע (דורש restart ל-VS Code)
