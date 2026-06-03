@@ -11,3 +11,12 @@ Thumbs.db
 *.log
 tmp/
 temp/
+
+# Node
+node_modules/
+
+# VSIX packages
+*.vsix
+
+# Bundled usage-core binaries — added at package time, not committed to git
+bin/usage-core-*

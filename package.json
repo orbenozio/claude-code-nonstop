@@ -1,0 +1,145 @@
+{
+  "name": "claude-code-night-shift",
+  "displayName": "Claude Code Night Shift",
+  "description": "Keep Claude Code working through the night — a toggle in the panel that pings Claude to continue and waits out rate limits, resuming when the window reopens.",
+  "version": "0.1.0",
+  "publisher": "orbenozio",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "keywords": [
+    "claude",
+    "claude code",
+    "automation",
+    "overnight",
+    "rate limit"
+  ],
+  "main": "./src/extension.js",
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "nightShift.checkAndInject",
+        "title": "Night Shift: Check & Inject"
+      },
+      {
+        "command": "nightShift.removeInjection",
+        "title": "Night Shift: Remove Injection (restore Claude Code)"
+      },
+      {
+        "command": "nightShift.stopNow",
+        "title": "Night Shift: Stop Now (best effort)"
+      },
+      {
+        "command": "nightShift.showMenu",
+        "title": "Night Shift: Menu"
+      }
+    ],
+    "configuration": {
+      "title": "Claude Code Night Shift",
+      "properties": {
+        "nightShift.autoInject": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically inject into Claude Code on startup and re-inject after updates."
+        },
+        "nightShift.pingText": {
+          "type": "string",
+          "default": "continue",
+          "description": "The message sent to Claude on each ping."
+        },
+        "nightShift.pingIntervalMs": {
+          "type": "number",
+          "default": 60000,
+          "minimum": 15000,
+          "maximum": 600000,
+          "description": "Minimum milliseconds between pings."
+        },
+        "nightShift.pollMs": {
+          "type": "number",
+          "default": 1000,
+          "minimum": 500,
+          "maximum": 5000,
+          "description": "How often (ms) the webview checks Claude's state."
+        },
+        "nightShift.maxRuntimeMs": {
+          "type": "number",
+          "default": 28800000,
+          "minimum": 0,
+          "description": "Max shift length in ms (0 = no limit). Rate-limit sleep time is not counted."
+        },
+        "nightShift.maxPings": {
+          "type": "number",
+          "default": 100,
+          "minimum": 0,
+          "description": "Max pings per shift (0 = no limit)."
+        },
+        "nightShift.quietHours": {
+          "type": "string",
+          "default": "",
+          "description": "Window during which no pings are sent, e.g. \"23:00-07:00\" (supports crossing midnight). Empty = disabled."
+        },
+        "nightShift.onQuestion": {
+          "type": "string",
+          "enum": [
+            "stop",
+            "answer"
+          ],
+          "default": "stop",
+          "description": "What to do when Claude asks a clarifying question: stop the shift and wait, or send a neutral answer."
+        },
+        "nightShift.questionAnswer": {
+          "type": "string",
+          "default": "continue, use your best judgment",
+          "description": "Neutral answer sent when onQuestion = answer."
+        },
+        "nightShift.doneStallPings": {
+          "type": "number",
+          "default": 3,
+          "minimum": 1,
+          "maximum": 20,
+          "description": "Consecutive pings with no meaningful new output before declaring the task done."
+        },
+        "nightShift.sentinelDoneDetection": {
+          "type": "boolean",
+          "default": true,
+          "description": "Append a sentinel instruction to pings so Claude signals completion reliably."
+        },
+        "nightShift.rateLimitFallbackMs": {
+          "type": "number",
+          "default": 18000000,
+          "minimum": 600000,
+          "maximum": 43200000,
+          "description": "How long to wait when a rate-limit reset time cannot be determined."
+        },
+        "nightShift.reinjectCheckHours": {
+          "type": "number",
+          "default": 6,
+          "minimum": 0,
+          "maximum": 48,
+          "description": "How often (hours) to re-check/re-inject after Claude Code updates (0 = disabled)."
+        },
+        "nightShift.userActivityPauseMs": {
+          "type": "number",
+          "default": 120000,
+          "minimum": 0,
+          "description": "Pause pinging for this long after detecting real user activity in the input."
+        },
+        "nightShift.debug": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable verbose recon/debug logging in the injected webview script."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "test": "node test/run.js"
+  }
+}
