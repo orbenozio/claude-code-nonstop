@@ -1,7 +1,7 @@
 {
-  "name": "claude-code-night-shift",
-  "displayName": "Claude Code Night Shift",
-  "description": "Keep Claude Code working through the night — a toggle in the panel that pings Claude to continue and waits out rate limits, resuming when the window reopens.",
+  "name": "claude-code-nonstop",
+  "displayName": "Claude Code Nonstop",
+  "description": "Keep Claude Code going across usage limits — a panel toggle that pings Claude to continue and, when you hit a rate limit, waits it out and resumes automatically when the window reopens.",
   "version": "0.1.0",
   "publisher": "orbenozio",
   "license": "MIT",
@@ -15,8 +15,9 @@
     "claude",
     "claude code",
     "automation",
-    "overnight",
-    "rate limit"
+    "rate limit",
+    "nonstop",
+    "resume"
   ],
   "main": "./src/extension.js",
   "activationEvents": [
@@ -26,23 +27,23 @@
     "commands": [
       {
         "command": "nightShift.checkAndInject",
-        "title": "Night Shift: Check & Inject"
+        "title": "Nonstop: Check & Inject"
       },
       {
         "command": "nightShift.removeInjection",
-        "title": "Night Shift: Remove Injection (restore Claude Code)"
+        "title": "Nonstop: Remove Injection (restore Claude Code)"
       },
       {
         "command": "nightShift.stopNow",
-        "title": "Night Shift: Stop Now (best effort)"
+        "title": "Nonstop: Stop Now (best effort)"
       },
       {
         "command": "nightShift.showMenu",
-        "title": "Night Shift: Menu"
+        "title": "Nonstop: Menu"
       }
     ],
     "configuration": {
-      "title": "Claude Code Night Shift",
+      "title": "Claude Code Nonstop",
       "properties": {
         "nightShift.autoInject": {
           "type": "boolean",

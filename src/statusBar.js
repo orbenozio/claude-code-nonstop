@@ -9,8 +9,8 @@ let statusBarItem;
 function create(vscode, context) {
   statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
   statusBarItem.command = 'nightShift.showMenu';
-  statusBarItem.text = '$(moon) Night Shift';
-  statusBarItem.tooltip = 'Claude Code Night Shift — click for menu';
+  statusBarItem.text = '$(sync) Nonstop';
+  statusBarItem.tooltip = 'Claude Code Nonstop — click for menu';
   statusBarItem.show();
   context.subscriptions.push(statusBarItem);
   return statusBarItem;
