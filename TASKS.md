@@ -7,7 +7,6 @@
 
 ### Phase 4 — ליטוש ואריזה
 
-* [ ] VSIX + פרסום ל-VS Code Marketplace (vsce publish — דורש publisher + PAT)
 * [ ] ריצת לילה אמיתית מקצה-לקצה (≥5 ערבים) + עמידה במטריקות §8.3
 
 ## Decisions
@@ -20,7 +19,8 @@
 
 ## Done
 
-* [x] **Phase 3 — זיהוי rate-limit אמיתי:** נלכד הנוסח האמיתי ("You've hit your session limit · resets 10:10pm (Asia/Jerusalem)"), תוקנו ה-regexes ו-`parseResetTime` (מאומת מקצה-לקצה). גם ריצת-לילה אמיתית אחת הצליחה: המתין, חידש מאותה נקודה, סיים ב-NONSTOP_DONE.
+* [x] **פורסם ל-VS Code Marketplace:** `OrBenozio.claude-code-nonstop@0.1.3` (release רגיל). פרסום לא-אינטראקטיבי דרך `VSCE_PAT` (User-level), והסקיל `ship-vscode-extension` עודכן בהתאם.
+* [x] **Phase 3 — זיהוי rate-limit אמיתי:** נלכד הנוסח האמיתי ("You've hit your session limit · resets 10:10pm (Asia/Jerusalem)"), תוקנו ה-regexes ו-`parseResetTime` (מאומת מקצה-לקצה). גם ריצת-לילה אמיתית אחת הצליחה: המתין, חידש מאותה נקודה, סיים ב-NONSTOP\_DONE.
 * [x] איפיון (SPEC.md v0.1) דרך architect DRAFT
 * [x] ביקורת כפולה: spec-reviewer + architect REVIEW
 * [x] עדכון איפיון ל-v0.2 (החלטות + תיקוני ביקורת + אילוץ מרקטפלייס)
