@@ -558,7 +558,13 @@
     }
 
     var title = document.createElement('div');
-    title.textContent = '♾️ Nonstop'; title.style.cssText = 'font-weight:bold;margin-bottom:2px;';
+    title.style.cssText = 'font-weight:bold;margin-bottom:2px;';
+    title.textContent = '♾️ Nonstop ';
+    var titleState = document.createElement('span');
+    var on = isEnabled();
+    titleState.textContent = on ? '● ON' : '● OFF';
+    titleState.style.cssText = 'font-weight:normal;font-size:11px;color:' + (on ? '#4ec9b0' : '#888') + ';';
+    title.appendChild(titleState);
     pop.appendChild(title);
     var hint = document.createElement('div');
     hint.textContent = 'Auto-sends a message to keep Claude going, and waits out usage limits.';
@@ -577,7 +583,7 @@
     row('Message to send', ptext);
 
     var quiet = mkInput('text', liveCfg('quietHours') || '', 95);
-    quiet.placeholder = '09:00-17:00';
+    quiet.placeholder = 'e.g. 09:00-17:00';
     quiet.title = 'Optional. A window when Nonstop pauses and sends nothing — e.g. your work hours. Leave empty to run anytime, including overnight.';
     quiet.onchange = function () { setOverride('quietHours', quiet.value); };
     row('Pause during (optional)', quiet);
@@ -588,9 +594,17 @@
     row('Stop after N messages (0=off)', mp);
 
     var mr = mkInput('number', Math.round(liveCfg('maxRuntimeMs') / 60000));
-    mr.title = 'Stop automatically after running this long. 0 = no limit.';
-    mr.onchange = function () { setOverride('maxRuntimeMs', Math.max(0, parseInt(mr.value, 10) || 0) * 60000); };
-    row('Stop after (minutes, 0=off)', mr);
+    mr.title = 'Stop automatically after running this long. 0 = no limit. (e.g. 480 = 8h)';
+    var mrWrap = document.createElement('div');
+    mrWrap.style.cssText = 'display:flex;align-items:center;gap:6px;';
+    var mrHint = document.createElement('span');
+    mrHint.style.cssText = 'opacity:.6;white-space:nowrap;min-width:30px;text-align:right;';
+    function updMrHint() { var m = parseInt(mr.value, 10) || 0; mrHint.textContent = m > 0 ? '= ' + (Math.round(m / 6) / 10) + 'h' : ''; }
+    updMrHint();
+    mr.oninput = updMrHint;
+    mr.onchange = function () { setOverride('maxRuntimeMs', Math.max(0, parseInt(mr.value, 10) || 0) * 60000); updMrHint(); };
+    mrWrap.appendChild(mr); mrWrap.appendChild(mrHint);
+    row('Stop after (minutes, 0=off)', mrWrap);
 
     var reset = document.createElement('button');
     reset.textContent = 'Reset to defaults';
