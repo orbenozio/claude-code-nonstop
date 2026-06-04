@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.1.3] - 2026-06-04
+
+### Changed
+
+- **חלונית ההגדרות (קליק-ימני) שופרה:** הכותרת מציגה מצב חי `● ON`/`● OFF`, השדה "Pause during" קיבל placeholder ברור (`e.g. 09:00-17:00`), ו-"Stop after (minutes)" מציג המרה חיה לשעות (`= 8h`). תוקנה חריגה מגבולות הפאנל — החלונית נמדדת ומתמקמת בתוך המסך (כולל הקצה התחתון).
+- **טקסט הפינג קריא יותר:** `continue - reply NONSTOP_DONE when fully done` (במקום שורות שנבלעו בתיבת הקלט והודבקו זו לזו).
+- **status bar משקף מצב הזרקה אמיתי:** `$(check)` פעיל / `$(warning) reload` / `$(circle-slash)` אין פאנל.
+
+### Added
+
+- צילומי מסך ל-README (כפתור ה-♾️ ב-footer + חלונית ההגדרות) ומטא-דאטה ל-Marketplace (`galleryBanner`, קטגוריית `AI`, `homepage`/`bugs`).
+- בדיקות יחידה לקצוות מעברי DST (spring-forward gap / fall-back overlap).
+
+### Removed
+
+- ניקוי dead code מה-VSIX (`src/ratelimit/**` הוחרג) — 18→16 קבצים.
+
 ## [0.1.2] - 2026-06-04
 
 ### Added
