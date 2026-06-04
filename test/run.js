@@ -194,6 +194,22 @@ test('DST zone resolved correctly (America/New_York, summer = EDT)', () => {
   const t = parseResetTime('10:10pm (America/New_York)', Date.parse('2026-07-01T12:00:00Z'));
   assert.strictEqual(t, Date.parse('2026-07-02T02:10:00Z')); // 22:10 EDT = 02:10Z next day
 });
+test('DST spring-forward: real time exact; the non-existent gap time maps to an adjacent instant', () => {
+  // Mar 8 2026: NY clocks jump 2:00 EST -> 3:00 EDT, so 2:00-3:00 local does not exist.
+  const now = Date.parse('2026-03-08T05:30:00Z');
+  // 3:30am exists (EDT) -> exact.
+  assert.strictEqual(parseResetTime('3:30am (America/New_York)', now), Date.parse('2026-03-08T07:30:00Z'));
+  // 2:30am is in the gap -> resolves to a real future instant (the EST side, 1:30am), never crashes.
+  assert.strictEqual(parseResetTime('2:30am (America/New_York)', now), Date.parse('2026-03-08T06:30:00Z'));
+});
+test('DST fall-back: unambiguous time exact; the doubled hour picks the first occurrence', () => {
+  // Nov 1 2026: NY clocks fall 2:00 EDT -> 1:00 EST, so 1:00-2:00 local happens twice.
+  const now = Date.parse('2026-11-01T04:00:00Z');
+  // 1:30am occurs twice -> first occurrence (EDT, 05:30Z).
+  assert.strictEqual(parseResetTime('1:30am (America/New_York)', now), Date.parse('2026-11-01T05:30:00Z'));
+  // 2:30am is unambiguous (EST) -> exact.
+  assert.strictEqual(parseResetTime('2:30am (America/New_York)', now), Date.parse('2026-11-01T07:30:00Z'));
+});
 test('noon and midnight map correctly (Etc/UTC)', () => {
   assert.strictEqual(parseResetTime('12:00pm (Etc/UTC)', Date.parse('2026-06-04T05:00:00Z')),
     Date.parse('2026-06-04T12:00:00Z'));
