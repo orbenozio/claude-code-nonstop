@@ -32,6 +32,7 @@
     userActivityPauseMs: 120000,
     debug: false,
     doneSentinel: 'NONSTOP_DONE',
+    version: '', // extension version, seeded by the host — shown in the popup header
   };
   var CFG = Object.assign({}, DEFAULTS, (window.__NONSTOP_CONFIG__ || {}));
 
@@ -750,7 +751,7 @@
 
     var title = document.createElement('div');
     title.style.cssText = 'font-weight:bold;margin-bottom:2px;';
-    title.textContent = '♾️ Nonstop ';
+    title.textContent = '♾️ Nonstop' + (CFG.version ? ' v' + CFG.version : '') + ' ';
     var titleState = document.createElement('span');
     var on = isEnabled();
     titleState.textContent = on ? '● ON' : '● OFF';

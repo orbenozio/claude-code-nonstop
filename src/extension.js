@@ -24,9 +24,10 @@ function getConfig() {
 }
 
 /** Build the seed config object passed to the webview via __NONSTOP_CONFIG__. */
-function buildSeedConfig() {
+function buildSeedConfig(version) {
   const c = getConfig();
   return {
+    version: version || '',
     pingText: c.get('pingText', 'continue'),
     pingIntervalMs: c.get('pingIntervalMs', 60000),
     pollMs: c.get('pollMs', 1000),
@@ -99,7 +100,7 @@ function checkAndInject(context, { interactive = false } = {}) {
 
   const version = context.extension.packageJSON.version;
   const scriptBody = loadWebviewScript(context);
-  const configJson = JSON.stringify(buildSeedConfig());
+  const configJson = JSON.stringify(buildSeedConfig(version));
   const targets = resolveTargets(vscode);
 
   let changed = 0;

@@ -1,6 +1,7 @@
 'use strict';
 
 let statusBarItem;
+let label = 'Nonstop'; // includes the version once create() runs
 
 /**
  * A small status bar item. Because there is no host<->webview channel in MVP
@@ -9,9 +10,11 @@ let statusBarItem;
  * button inside the panel.
  */
 function create(vscode, context) {
+  const v = context.extension.packageJSON.version;
+  label = v ? 'Nonstop v' + v : 'Nonstop';
   statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
   statusBarItem.command = 'nonstop.showMenu';
-  statusBarItem.text = '$(sync) Nonstop';
+  statusBarItem.text = '$(sync) ' + label;
   statusBarItem.tooltip = 'Claude Code Nonstop — click for menu';
   statusBarItem.show();
   context.subscriptions.push(statusBarItem);
@@ -31,11 +34,11 @@ function setText(text, tooltip) {
 function reflect(r) {
   if (!statusBarItem) return;
   if (!r || r.targets === 0) {
-    setText('$(circle-slash) Nonstop', 'Claude Code Nonstop — no Claude Code panel found to inject into. Click for menu.');
+    setText('$(circle-slash) ' + label, 'Claude Code Nonstop — no Claude Code panel found to inject into. Click for menu.');
   } else if (r.changed > 0) {
-    setText('$(warning) Nonstop — reload', 'Claude Code Nonstop injected. Reload the window to load it. Click for menu.');
+    setText('$(warning) ' + label + ' — reload', 'Claude Code Nonstop injected. Reload the window to load it. Click for menu.');
   } else {
-    setText('$(check) Nonstop', 'Claude Code Nonstop is active (injected & current). Click for menu.');
+    setText('$(check) ' + label, 'Claude Code Nonstop is active (injected & current). Click for menu.');
   }
 }
 
