@@ -62,6 +62,7 @@
     sessionStart: 'nonstop-session-start',
     pingCount: 'nonstop-ping-count',
     ownerId: 'nonstop-owner-id',
+    ownerBeat: 'nonstop-owner-beat', // owner's lease heartbeat (epoch ms)
     sleptAccum: 'nonstop-slept-accum-ms',
     rlCapture: 'nonstop-rl-capture', // Phase 3: stashed real rate-limit notice
     lastStop: 'nonstop-last-stop',   // why/when the last shift ended (diagnostics)
@@ -73,7 +74,24 @@
 
   // Unique id for this webview instance (ownership for multi-panel; SPEC §4.7).
   var INSTANCE_ID = 'ns-' + Math.random().toString(36).slice(2) + '-' + Date.now();
+  // Ownership is a heartbeat lease: the active panel renews LS.ownerBeat every tick.
+  // If the owner's beat goes stale (e.g. it was reloaded/closed), another live panel
+  // takes over — so an enabled shift never gets orphaned by a reload.
+  var OWNER_LEASE_MS = 8000;
   function isOwner() { return lsGet(LS.ownerId, '') === INSTANCE_ID; }
+  function ownerAlive() {
+    var beat = lsNum(LS.ownerBeat, 0);
+    return beat > 0 && (Date.now() - beat) < OWNER_LEASE_MS;
+  }
+  // Become/stay owner if it's mine, unowned, or the current owner's lease expired.
+  function claimOwnership() {
+    if (isOwner() || !lsGet(LS.ownerId, '') || !ownerAlive()) {
+      lsSet(LS.ownerId, INSTANCE_ID);
+      lsSet(LS.ownerBeat, Date.now());
+      return true;
+    }
+    return false; // another LIVE panel owns the shift
+  }
 
   // ── Signals: selectors + state detection (LAYERED, DEFENSIVE) ────────────────
   // Rule: never hardcode full class names — Claude's class suffixes are hashed and
@@ -298,6 +316,7 @@
   function startShift() {
     lsSet(LS.enabled, 'true');
     lsSet(LS.ownerId, INSTANCE_ID);
+    lsSet(LS.ownerBeat, Date.now());
     lsSet(LS.sessionStart, Date.now());
     lsSet(LS.pingCount, 0);
     lsSet(LS.sleptAccum, 0);
@@ -385,7 +404,7 @@
   var lastPingSig = null;  // output signature captured right after our last ping
   function tick() {
     if (!isEnabled()) return;
-    if (!isOwner()) return; // another panel owns this shift
+    if (!claimOwnership()) return; // another LIVE panel owns this shift
 
     // Phase 3: always try to capture a real limit notice while a shift runs —
     // even during the sleep window below, since that's when it's on screen.
@@ -725,7 +744,9 @@
   function updateButton() {
     var btn = document.getElementById('nonstop-btn');
     if (!btn) return;
-    var on = isEnabled() && isOwner();
+    // Reflect the shift state itself — ownership is an internal coordination detail,
+    // and a reloaded panel claims it within a tick, so don't gate the visual on it.
+    var on = isEnabled();
     btn.classList.toggle('ns-on', on);
     btn.title = on ? 'Nonstop: ON (click to stop)' : 'Nonstop: OFF (click to start)';
   }
@@ -782,6 +803,7 @@
     simulateRateLimit: function (sec) {
       sec = sec || 15;
       if (!isEnabled()) startShift();
+      claimOwnership(); // make sure THIS panel drives the test
       lastPingAt = 0; // make a ping eligible immediately on wake
       lsSet(LS.sleepUntil, Date.now() + sec * 1000);
       log('TEST: simulating a rate-limit sleep for', sec, 's — will resume with a ping on wake');
