@@ -3,6 +3,10 @@
 .gitignore
 .vscodeignore
 .claude/**
+
+# Secrets — MUST never ship in the VSIX (would publish the PAT publicly).
+.env
+.env.*
 SPEC.md
 RECON.md
 TASKS.md

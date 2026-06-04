@@ -12,6 +12,10 @@ Thumbs.db
 tmp/
 temp/
 
+# Secrets — never commit (e.g. VSCE_PAT for Marketplace publishing)
+.env
+.env.*
+
 # Node
 node_modules/
 
