@@ -616,7 +616,16 @@
     };
     pop.appendChild(reset);
 
+    // Never let it spill past the panel: cap width to the viewport, then re-clamp
+    // position using the popup's real measured size (it grows with labels/hints, and
+    // usually opens near the bottom edge next to the footer button).
+    pop.style.maxWidth = (window.innerWidth - 16) + 'px';
     document.body.appendChild(pop);
+    var rect = pop.getBoundingClientRect();
+    var left = Math.min(e.clientX, window.innerWidth - rect.width - 8);
+    var top = Math.min(e.clientY, window.innerHeight - rect.height - 8);
+    pop.style.left = Math.max(8, left) + 'px';
+    pop.style.top = Math.max(8, top) + 'px';
 
     function outside(ev) { if (!pop.contains(ev.target)) closeSettingsPopup(); }
     function esc(ev) { if (ev.key === 'Escape') closeSettingsPopup(); }
