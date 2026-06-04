@@ -92,12 +92,15 @@
     workingHints: ['[aria-label*="Stop" i]', '[aria-label*="Interrupt" i]', '[class*="streaming_"]', '[class*="loading_"]'],
     // TUNE: approval / question UI (typically a Yes radio + Submit).
     questionHints: ['[role="radiogroup"]', '[class*="approval_"]', '[class*="permission_"]'],
-    // TUNE: rate-limit message phrasing (server-streamed text, collected in Phase 3).
+    // Real format (captured live): "You've hit your session limit · resets 10:10pm (Asia/Jerusalem)".
+    // Time-capturing patterns first — their group (m[1]) feeds parseResetTime; the bare
+    // detector last just flags a limit so we sleep on the fallback window.
     rateLimitRegexes: [
-      /usage limit reached.*reset/i,
+      /hit your (?:session|usage|rate) limit[\s\S]{0,80}?resets?\s+(\d{1,2}:\d{2}\s*[ap]m\b(?:\s*\([^)]+\))?)/i,
+      /\bresets?\s+(?:at\s+)?(\d{1,2}:\d{2}\s*[ap]m\b(?:\s*\([^)]+\))?)/i,
+      /limit will reset at\s+([^\n]+)/i,
       /\b\d+\s*-?\s*hour limit reached/i,
-      /limit will reset at\s+(.+)/i,
-      /resets?\s+at\s+(.+)/i,
+      /(?:hit|reached)[^\n]{0,30}\b(?:session|usage|rate) limit/i,
     ],
   };
 
@@ -188,7 +191,7 @@
   // never triggers sleeping, only stashing) and persist a context snippet + timestamp
   // to localStorage. That way a real overnight hit is recoverable even if DevTools
   // was closed: read window.__nonstopDebug.rateLimitCapture() afterwards.
-  var RL_CAPTURE_RE = /(usage limit|rate limit|limit reached|limit will reset|resets?\s+(?:at|in)\b|too many requests|\b429\b|approaching your usage)/i;
+  var RL_CAPTURE_RE = /(session limit|usage limit|rate limit|limit reached|limit will reset|\bresets?\s+\d|too many requests|\b429\b|approaching your usage)/i;
   function captureRateLimitCandidate() {
     var text = panelText();
     if (!text) return;
@@ -460,7 +463,9 @@
     log('rate limited — sleeping until', new Date(until).toISOString());
   }
 
-  // Parse a human reset time like "3:30 PM" / "15:30" into a future timestamp.
+  // Parse a human reset time like "10:10pm (Asia/Jerusalem)" / "3:30 PM" / "15:30"
+  // into a future timestamp. Any "(Timezone)" suffix is ignored — the time is read
+  // as local, which is correct when Claude reports the reset in the user's own zone.
   function parseResetTime(str) {
     if (!str) return 0;
     var m = String(str).match(/(\d{1,2}):(\d{2})\s*(am|pm)?/i);
