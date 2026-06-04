@@ -64,6 +64,7 @@
     ownerId: 'nonstop-owner-id',
     sleptAccum: 'nonstop-slept-accum-ms',
     rlCapture: 'nonstop-rl-capture', // Phase 3: stashed real rate-limit notice
+    lastStop: 'nonstop-last-stop',   // why/when the last shift ended (diagnostics)
   };
   function lsGet(k, d) { try { var v = localStorage.getItem(k); return v === null ? d : v; } catch (e) { return d; } }
   function lsSet(k, v) { try { localStorage.setItem(k, String(v)); } catch (e) {} }
@@ -206,6 +207,14 @@
     log('⚠️ RATE-LIMIT CANDIDATE captured (read __nonstopDebug.rateLimitCapture()):', snippet);
   }
 
+  // Wide net — true if the panel tail looks like ANY usage/rate-limit notice, even
+  // when the precise detectRateLimit() regex didn't match. Used as a safety guard so
+  // a real limit is never mistaken for "task done" and the shift killed.
+  function looksRateLimited() {
+    var text = panelText();
+    return !!text && RL_CAPTURE_RE.test(text.slice(-4000));
+  }
+
   // Returns one of WORKING / WAITING_QUESTION / WAITING_CONTINUE / RATE_LIMITED / DONE / UNKNOWN
   function detectState() {
     // Layer 0: rate limit takes precedence (so we never ping into a wall).
@@ -302,6 +311,7 @@
   function stopShift(reason) {
     lsSet(LS.enabled, 'false');
     lsSet(LS.sleepUntil, '');
+    lsSet(LS.lastStop, (reason || 'manual') + ' @ ' + new Date().toISOString());
     log('shift stopped:', reason || 'manual');
     updateButton();
   }
@@ -423,7 +433,19 @@
       var sig = outputSignature();
       if (lastPingSig !== null && sig === lastPingSig) {
         stallCount++;
-        if (stallCount >= CFG.doneStallPings) { stopShift('output-stall'); return; }
+        if (stallCount >= CFG.doneStallPings) {
+          // Output stopped growing. Before declaring "done", make sure this isn't a
+          // rate limit that the precise detector missed — otherwise we'd kill the
+          // shift mid-limit and never resume after the reset.
+          if (looksRateLimited()) {
+            log('stall looks like a rate limit — sleeping instead of stopping');
+            stallCount = 0;
+            enterSleep();
+            return;
+          }
+          stopShift('output-stall');
+          return;
+        }
       } else {
         stallCount = 0;
       }
@@ -456,6 +478,13 @@
     if (rl && rl.captured) {
       var parsed = parseResetTime(rl.captured);
       if (parsed) until = parsed;
+    }
+    if (!until) {
+      // Precise detect missed the time — still try to pull a "resets <time>" out of
+      // the tail before falling back to the fixed wait window.
+      var tail = (panelText() || '').slice(-4000);
+      var m = tail.match(/\bresets?\s+(?:at\s+)?(\d{1,2}:\d{2}\s*[ap]m\b(?:\s*\([^)]+\))?)/i);
+      if (m) { var p2 = parseResetTime(m[1]); if (p2) until = p2; }
     }
     if (!until) until = Date.now() + CFG.rateLimitFallbackMs;
     // Accumulate slept time so maxRuntime ignores it.
@@ -734,6 +763,30 @@
     // Phase 3 helpers: read or clear the stashed real rate-limit notice.
     rateLimitCapture: function () { return lsGet(LS.rlCapture, '(none captured)'); },
     clearRateLimitCapture: function () { lsSet(LS.rlCapture, ''); return 'cleared'; },
+    // Live shift status — the one-stop diagnostic ("why did it stop? is it sleeping?").
+    status: function () {
+      var s = lsNum(LS.sleepUntil, 0);
+      return {
+        enabled: isEnabled(),
+        owner: isOwner(),
+        state: detectState(),
+        looksRateLimited: looksRateLimited(),
+        pings: lsNum(LS.pingCount, 0),
+        sleepingUntil: s ? new Date(s).toISOString() : null,
+        lastStop: lsGet(LS.lastStop, '(none)'),
+      };
+    },
+    // Test the wait→resume path WITHOUT a real limit: turns the shift on (if needed)
+    // and sleeps for `sec` seconds, then resumes (a ping fires on wake). Watch the
+    // console: you'll see "sleeping…" now and a "pinged:" line ~sec seconds later.
+    simulateRateLimit: function (sec) {
+      sec = sec || 15;
+      if (!isEnabled()) startShift();
+      lastPingAt = 0; // make a ping eligible immediately on wake
+      lsSet(LS.sleepUntil, Date.now() + sec * 1000);
+      log('TEST: simulating a rate-limit sleep for', sec, 's — will resume with a ping on wake');
+      return 'sleeping ~' + sec + 's; expect a ping after wake. Check __nonstopDebug.status().';
+    },
   };
 
   log('initialized', { instance: INSTANCE_ID, debug: CFG.debug });

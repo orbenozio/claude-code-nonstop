@@ -1,5 +1,15 @@
 # Changelog
 
+## \[0.1.4] - 2026-06-04
+
+### Fixed
+
+* **Shift no longer dies during a rate limit it didn't precisely detect.** If a usage limit hit but the exact notice wasn't matched, output stopped growing, the stall detector mistook it for "task done", and the shift stopped, so nothing resumed after the reset. Now, before declaring done on a stall, a wide net checks for any limit-looking text and sleeps (waiting out the reset) instead of stopping. `enterSleep` also tries harder to parse the reset time from surrounding text.
+
+### Added
+
+* `__nonstopDebug.status()` for live diagnostics (enabled, state, sleeping-until, pings, last-stop reason) and `__nonstopDebug.simulateRateLimit(seconds)` to test the wait→resume cycle in seconds instead of waiting for a real limit. The last-stop reason is also persisted.
+
 ## \[0.1.3] - 2026-06-04
 
 ### Changed
