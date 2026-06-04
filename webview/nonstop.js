@@ -12,8 +12,20 @@
     maxRuntimeMs: 28800000,
     maxPings: 100,
     quietHours: '',
+    // Legacy generic-question handling (kept for back-compat / postMessage-only path).
     onQuestion: 'stop',
     questionAnswer: 'continue, use your best judgment',
+    // Permission prompts ("Allow this bash command?"): defer = let another approver
+    // (e.g. the RTL extension's YOLO) or the user handle it; approve = auto-click Yes
+    // after the grace window; stop = halt and leave it to the user.
+    onPermission: 'defer',
+    // How long to wait for another approver to clear a permission popup before we
+    // apply onPermission. Set HIGHER than your YOLO auto-approve delay so YOLO wins.
+    permissionGraceMs: 10000,
+    // Decision prompts (Claude asks you to choose between options): stop = halt and
+    // leave it (recommended); best-judgment = pick the last "Other" option + answer.
+    onDecision: 'stop',
+    decisionAnswer: 'use your best judgment',
     doneStallPings: 3,
     sentinelDoneDetection: true,
     rateLimitFallbackMs: 18000000,
@@ -109,8 +121,15 @@
     modeButton: '[class*="footerButtonPrimary_"]',
     // TUNE: indicators of an in-progress turn (stop/interrupt button, spinner).
     workingHints: ['[aria-label*="Stop" i]', '[aria-label*="Interrupt" i]', '[class*="streaming_"]', '[class*="loading_"]'],
-    // TUNE: approval / question UI (typically a Yes radio + Submit).
-    questionHints: ['[role="radiogroup"]', '[class*="approval_"]', '[class*="permission_"]'],
+    // Permission AND decision popups share this outer container (verified against the
+    // live panel 2026-06). The inner content disambiguates them — see detectPopup().
+    popupRoot: '[class*="permissionRequestContainer_"]',
+    // A DECISION popup (choose-an-option) renders role="radio" options inside an
+    // options/questions container. A PERMISSION popup ("Allow this command?") does not.
+    decisionHints: ['[role="radio"]', '[class*="optionsContainer_"]', '[class*="questionsContainer_"]'],
+    // Action buttons live in this container; the FIRST one is the safe "Yes" (allow
+    // once), not "Yes, for all projects". Used to auto-approve when onPermission=approve.
+    popupButtons: '[class*="buttonContainer_"] button',
     // Real format (captured live): "You've hit your session limit · resets 10:10pm (Asia/Jerusalem)".
     // Time-capturing patterns first — their group (m[1]) feeds parseResetTime; the bare
     // detector last just flags a limit so we sleep on the fallback window.
@@ -233,7 +252,21 @@
     return !!text && RL_CAPTURE_RE.test(text.slice(-4000));
   }
 
-  // Returns one of WORKING / WAITING_QUESTION / WAITING_CONTINUE / RATE_LIMITED / DONE / UNKNOWN
+  // Classify a visible interaction popup. Permission and decision popups share the
+  // same outer container (SIGNALS.popupRoot); a decision popup is the one that also
+  // contains the choose-an-option structure (role="radio" / optionsContainer_).
+  // Returns 'DECISION' | 'PERMISSION' | null (no popup).
+  function detectPopup() {
+    var root = $(SIGNALS.popupRoot);
+    if (!root) return null;
+    for (var i = 0; i < SIGNALS.decisionHints.length; i++) {
+      if ($(SIGNALS.decisionHints[i], root)) return 'DECISION';
+    }
+    return 'PERMISSION';
+  }
+
+  // Returns one of WORKING / WAITING_PERMISSION / WAITING_DECISION / WAITING_QUESTION
+  // / WAITING_CONTINUE / RATE_LIMITED / DONE / UNKNOWN
   function detectState() {
     // Layer 0: rate limit takes precedence (so we never ping into a wall).
     if (detectRateLimit()) return 'RATE_LIMITED';
@@ -242,24 +275,114 @@
     // selector-independent WORKING signal.
     if (isStreaming()) return 'WORKING';
 
-    // Layer 1: observed postMessage state (fresh only).
+    // Layer 1: a visible popup is a concrete DOM signal — most reliable when present.
+    var popup = detectPopup();
+    if (popup === 'PERMISSION') return 'WAITING_PERMISSION';
+    if (popup === 'DECISION') return 'WAITING_DECISION';
+
+    // Layer 2: observed postMessage state (fresh only).
     if (observedState && (Date.now() - observedStateAt) < 5000) {
       if (observedState === 'running') return 'WORKING';
-      if (observedState === 'waiting_input') {
-        return matchAny(SIGNALS.questionHints) ? 'WAITING_QUESTION' : 'WAITING_CONTINUE';
-      }
+      // waiting_input with no classified popup above = Claude finished its turn and is
+      // waiting on us → exactly when we want to nudge "continue".
+      if (observedState === 'waiting_input') return 'WAITING_CONTINUE';
       // idle
       return inputText() === '' ? 'WAITING_CONTINUE' : 'UNKNOWN';
     }
 
-    // Layer 2: DOM reflection.
+    // Layer 3: DOM reflection.
     if (matchAny(SIGNALS.workingHints)) return 'WORKING';
-    if (matchAny(SIGNALS.questionHints)) return 'WAITING_QUESTION';
 
-    // Layer 3: heuristic — input present & empty & nothing working = ready to ping.
+    // Layer 4: heuristic — input present & empty & nothing working = ready to ping.
     var input = getInput();
     if (input && inputText() === '') return 'WAITING_CONTINUE';
     return 'UNKNOWN';
+  }
+
+  // ── Popup handling: permission (approve/defer/stop) and decision (stop/answer) ──
+  var permissionSig = '';        // identity of the permission popup we're timing
+  var permissionSeenAt = 0;      // when that popup first appeared (grace clock)
+  var permissionHandledSig = ''; // a popup we already auto-approved (don't double-click)
+  var decisionSeenAt = 0;        // when the current decision popup first appeared
+
+  // Stable-ish identity of the current popup, so a NEW popup restarts the grace clock
+  // and a lingering one isn't acted on twice.
+  function popupSignature() {
+    var root = $(SIGNALS.popupRoot);
+    if (!root) return '';
+    return (root.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 200);
+  }
+
+  // Click the first action button (the safe "Yes" / allow-once) in a permission popup.
+  function approvePermission() {
+    var root = $(SIGNALS.popupRoot);
+    if (!root) return false;
+    var btn = root.querySelector(SIGNALS.popupButtons) || root.querySelector('button');
+    if (!btn) { log('approve: no button found in popup'); return false; }
+    weAreTyping = true; // suppress our own click from user-activity detection
+    try { btn.click(); } finally { setTimeout(function () { weAreTyping = false; }, 250); }
+    return true;
+  }
+
+  function handlePermission() {
+    var mode = liveCfg('onPermission'); // defer | approve | stop
+    if (mode === 'defer') return; // never touch it — another approver or the user owns it
+
+    var sig = popupSignature();
+    if (sig !== permissionSig) { // a new/changed permission popup → (re)start the grace clock
+      permissionSig = sig;
+      permissionSeenAt = Date.now();
+    }
+    // Grace: let any other approver (e.g. YOLO) clear it first. If it disappears within
+    // the window we never get here again for this popup, so we never interfere.
+    if ((Date.now() - permissionSeenAt) < liveCfg('permissionGraceMs')) return;
+
+    if (mode === 'stop') { stopShift('permission'); return; }
+
+    // mode === 'approve': click Yes once per popup.
+    if (sig && sig === permissionHandledSig) return;
+    if (approvePermission()) { permissionHandledSig = sig; log('permission auto-approved'); }
+  }
+
+  // best-judgment: select the last option ("Other"), type the answer into the revealed
+  // free-text field, then Submit. Returns true once submitted. Defensive: the revealed
+  // field's exact class is unverified, so we scope to any contenteditable inside the
+  // popup and only submit when the Submit button has become enabled.
+  function answerDecisionBestJudgment() {
+    var root = $(SIGNALS.popupRoot);
+    if (!root) return false;
+    var options = root.querySelectorAll('[role="radio"]');
+    if (!options.length) return false;
+    weAreTyping = true;
+    try {
+      var other = options[options.length - 1]; // "Other" is always the last option
+      if (other.getAttribute('aria-checked') !== 'true') other.click();
+      var field = root.querySelector('[contenteditable]');
+      if (field) {
+        field.focus();
+        try { document.execCommand('selectAll', false, null); document.execCommand('delete', false, null); } catch (e) {}
+        var txt = liveCfg('decisionAnswer');
+        try {
+          if (!document.execCommand('insertText', false, txt)) field.textContent = txt;
+        } catch (e) { field.textContent = txt; }
+      }
+      var submit = root.querySelector(SIGNALS.popupButtons);
+      if (submit && !submit.disabled) { submit.click(); return true; }
+      return false; // submit not enabled yet — try again next tick
+    } finally {
+      setTimeout(function () { weAreTyping = false; }, 250);
+    }
+  }
+
+  function handleDecision() {
+    if (liveCfg('onDecision') === 'best-judgment') {
+      if (!decisionSeenAt) decisionSeenAt = Date.now();
+      if (answerDecisionBestJudgment()) { decisionSeenAt = 0; return; }
+      // Couldn't complete the answer yet — give it a short window, then fall back to
+      // stopping so we never spin silently on a popup we can't drive.
+      if ((Date.now() - decisionSeenAt) < 6000) return;
+    }
+    stopShift('decision'); // default: leave the choice to the user
   }
 
   // ── Sending text into the contenteditable input ──────────────────────────────
@@ -425,6 +548,11 @@
     var state = detectState();
     log('state:', state);
 
+    // Reset the popup grace clocks whenever the matching popup isn't on screen, so a
+    // future popup starts its grace window fresh.
+    if (state !== 'WAITING_PERMISSION') { permissionSig = ''; permissionSeenAt = 0; }
+    if (state !== 'WAITING_DECISION') { decisionSeenAt = 0; }
+
     if (state === 'RATE_LIMITED') {
       enterSleep();
       return;
@@ -433,7 +561,11 @@
 
     if (state === 'DONE' || sawDoneSentinel()) { stopShift('done-sentinel'); return; }
 
+    if (state === 'WAITING_PERMISSION') { handlePermission(); return; }
+    if (state === 'WAITING_DECISION') { handleDecision(); return; }
+
     if (state === 'WAITING_QUESTION') {
+      // Legacy generic-question path (only reachable via postMessage without a popup).
       if (CFG.onQuestion === 'answer') {
         maybePing(CFG.questionAnswer);
       } else {
@@ -604,6 +736,17 @@
         'color:inherit;border:1px solid var(--vscode-input-border,#555);border-radius:3px;padding:2px 4px;';
       return i;
     }
+    function mkSelect(opts, val) {
+      var s = document.createElement('select');
+      s.style.cssText = 'background:var(--vscode-input-background,#3c3c3c);color:inherit;' +
+        'border:1px solid var(--vscode-input-border,#555);border-radius:3px;padding:2px 4px;';
+      opts.forEach(function (o) {
+        var op = document.createElement('option');
+        op.value = o; op.textContent = o; if (o === val) op.selected = true;
+        s.appendChild(op);
+      });
+      return s;
+    }
 
     var title = document.createElement('div');
     title.style.cssText = 'font-weight:bold;margin-bottom:2px;';
@@ -654,12 +797,34 @@
     mrWrap.appendChild(mr); mrWrap.appendChild(mrHint);
     row('Stop after (minutes, 0=off)', mrWrap);
 
+    var perm = mkSelect(['defer', 'approve', 'stop'], liveCfg('onPermission'));
+    perm.title = 'When Claude asks permission to run a tool (e.g. a bash command):\n' +
+      'defer = let another approver (YOLO) or you handle it;\n' +
+      'approve = auto-click Yes after the grace window;\n' +
+      'stop = halt and leave it to you.';
+    perm.onchange = function () { setOverride('onPermission', perm.value); };
+    row('On permission prompt', perm);
+
+    var grace = mkInput('number', Math.round(liveCfg('permissionGraceMs') / 1000));
+    grace.min = 0;
+    grace.title = 'How long to wait for another approver (e.g. YOLO) to clear a permission popup before applying the action above. Set this HIGHER than your YOLO auto-approve delay so YOLO always wins.';
+    grace.onchange = function () { setOverride('permissionGraceMs', Math.max(0, parseInt(grace.value, 10) || 0) * 1000); };
+    row('Permission grace (sec)', grace);
+
+    var dec = mkSelect(['stop', 'best-judgment'], liveCfg('onDecision'));
+    dec.title = 'When Claude asks you to choose between options:\n' +
+      'stop = halt and leave it to you (recommended);\n' +
+      'best-judgment = pick the last "Other" option and answer "use your best judgment".';
+    dec.onchange = function () { setOverride('onDecision', dec.value); };
+    row('On decision prompt', dec);
+
     var reset = document.createElement('button');
     reset.textContent = 'Reset to defaults';
     reset.style.cssText = 'margin-top:8px;width:100%;cursor:pointer;background:var(--vscode-button-secondaryBackground,#3a3d41);' +
       'color:var(--vscode-button-secondaryForeground,#ccc);border:none;border-radius:3px;padding:4px;';
     reset.onclick = function () {
-      ['pingIntervalMs', 'pingText', 'quietHours', 'maxPings', 'maxRuntimeMs'].forEach(function (k) { setOverride(k, null); });
+      ['pingIntervalMs', 'pingText', 'quietHours', 'maxPings', 'maxRuntimeMs',
+        'onPermission', 'permissionGraceMs', 'onDecision'].forEach(function (k) { setOverride(k, null); });
       closeSettingsPopup();
     };
     pop.appendChild(reset);
@@ -698,15 +863,18 @@
     st.textContent =
       // Own wrapper so we sit as a self-contained item next to the mode button.
       '#nonstop-nav{display:inline-flex;align-items:center;}' +
-      // OFF: greyed out & dim.
-      '#nonstop-btn{background:transparent;border:none;cursor:pointer;font-size:15px;' +
-      'padding:2px 6px;line-height:1;vertical-align:middle;' +
-      'filter:grayscale(1) brightness(0.85);opacity:0.5;transition:opacity .15s,filter .15s;}' +
-      '#nonstop-btn:hover{opacity:0.8;}' +
-      // ON: full colour + glow + gentle pulse.
-      '#nonstop-btn.ns-on{filter:none;opacity:1;animation:ns-pulse 1.8s ease-in-out infinite;}' +
-      '@keyframes ns-pulse{0%,100%{transform:scale(1);filter:drop-shadow(0 0 0 transparent)}' +
-      '50%{transform:scale(1.15);filter:drop-shadow(0 0 5px gold)}}';
+      // The SVG infinity is coloured via currentColor — deterministic ON/OFF.
+      // OFF: dim grey.
+      '#nonstop-btn{background:transparent;border:none;cursor:pointer;' +
+      'padding:3px 6px;line-height:0;vertical-align:middle;border-radius:6px;' +
+      'color:#8a8a8a;opacity:.6;transition:color .15s,opacity .15s,background .15s,box-shadow .15s;}' +
+      '#nonstop-btn svg{display:block;width:18px;height:18px;}' +
+      '#nonstop-btn:hover{opacity:.85;}' +
+      // ON: blue infinity on a pulsing gold "pill".
+      '#nonstop-btn.ns-on{color:#5090EB;opacity:1;background:rgba(255,215,0,.18);' +
+      'box-shadow:0 0 6px rgba(255,215,0,.55);animation:ns-pulse 1.8s ease-in-out infinite;}' +
+      '@keyframes ns-pulse{0%,100%{transform:scale(1);box-shadow:0 0 4px rgba(255,215,0,.45)}' +
+      '50%{transform:scale(1.12);box-shadow:0 0 9px rgba(255,215,0,.85)}}';
     document.head.appendChild(st);
   }
 
@@ -720,7 +888,11 @@
     btn.id = 'nonstop-btn';
     btn.type = 'button';
     btn.title = 'Nonstop: keep Claude working (ping + wait out rate limits)';
-    btn.textContent = '♾️';
+    btn.setAttribute('aria-label', 'Nonstop');
+    // Inline SVG infinity (Material "all_inclusive"), coloured via currentColor so
+    // ON/OFF is deterministic — the ♾️ emoji rendered unreliably (grey) in the webview.
+    btn.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">' +
+      '<path d="M18.6 6.62c-1.44 0-2.8.56-3.77 1.53L12 10.66 10.48 12h.01L7.8 14.39c-.64.64-1.49.99-2.4.99-1.87 0-3.39-1.51-3.39-3.38S3.53 8.62 5.4 8.62c.91 0 1.76.35 2.44 1.03l1.13 1 1.51-1.34L9.22 8.2C8.2 7.18 6.84 6.62 5.4 6.62 2.42 6.62 0 9.04 0 12s2.42 5.38 5.4 5.38c1.44 0 2.8-.56 3.77-1.53l2.83-2.5.01.01L14.49 11h-.01l2.69-2.39c.64-.64 1.49-.99 2.4-.99 1.87 0 3.39 1.51 3.39 3.38s-1.52 3.38-3.39 3.38c-.9 0-1.76-.35-2.44-1.03l-1.14-1.01-1.51 1.34 1.27 1.12c1.02 1.01 2.37 1.57 3.82 1.57 2.98 0 5.4-2.42 5.4-5.38s-2.42-5.38-5.4-5.38z"/></svg>';
     btn.addEventListener('mousedown', function (e) { e.preventDefault(); });
     btn.addEventListener('click', function (e) { e.preventDefault(); e.stopPropagation(); toggleShift(); });
     btn.addEventListener('contextmenu', function (e) { e.preventDefault(); e.stopPropagation(); showSettingsPopup(e); });
@@ -765,7 +937,7 @@
     setInterval(function () {
       try {
         console.log('[Nonstop] heartbeat — state:', detectState(),
-          '| streaming:', isStreaming(), '| enabled:', isEnabled(),
+          '| popup:', detectPopup(), '| streaming:', isStreaming(), '| enabled:', isEnabled(),
           '| inputEmpty:', inputText() === '', '| len:', panelLen());
       } catch (e) {
         console.log('[Nonstop] heartbeat error:', e && e.message);
@@ -776,6 +948,7 @@
   // Recon/debug handle for live tuning (only does anything in debug mode).
   window.__nonstopDebug = {
     state: detectState,
+    popup: detectPopup,
     rateLimit: detectRateLimit,
     input: getInput,
     config: CFG,
@@ -791,6 +964,7 @@
         enabled: isEnabled(),
         owner: isOwner(),
         state: detectState(),
+        popup: detectPopup(),
         looksRateLimited: looksRateLimited(),
         pings: lsNum(LS.pingCount, 0),
         sleepingUntil: s ? new Date(s).toISOString() : null,
