@@ -278,9 +278,9 @@
   function buildPingText() {
     var txt = liveCfg('pingText');
     if (CFG.sentinelDoneDetection) {
-      // Separate with a space, not a newline: line breaks get stripped when the text
-      // is inserted into the plaintext input, which mashed "continue" onto "(If…".
-      return txt + ' (If the task is fully complete, reply with exactly: ' + CFG.doneSentinel + ')';
+      // Keep it on one line with a space separator — line breaks get stripped when
+      // the text is inserted into the plaintext input.
+      return txt + ' - reply ' + CFG.doneSentinel + ' when fully done';
     }
     return txt;
   }
