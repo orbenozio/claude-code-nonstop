@@ -2,7 +2,11 @@
 
 A VS Code extension that keeps Claude Code going — even after you hit a usage limit. It adds an on/off toggle inside the Claude panel, automatically "pings" Claude to continue long-running tasks, and when you hit a rate limit it **waits until the window resets and automatically resumes the last task**. Great for overnight runs — but not only: any time your limit runs out mid-work, flip it on and forget about it.
 
-> **Status: in development (0.1.0).** The host core and the injected script exist, are covered by unit tests, and have been verified live in the panel. Rate-limit detection itself still needs tuning against a real limit (a safe fixed-wait fallback is in place).
+![Nonstop settings popup](media/settings.png)
+
+*Right-click the ♾️ button in the Claude footer for quick settings — interval, message, quiet hours, and stop limits.*
+
+> **Status: in development (0.1.2).** The host core and the injected script are covered by unit tests and verified live in the panel — including a real overnight run that waited out a usage limit and resumed the task automatically. Rate-limit reset times are parsed in their reported timezone, with a safe fixed-wait fallback.
 
 ## How it works
 
