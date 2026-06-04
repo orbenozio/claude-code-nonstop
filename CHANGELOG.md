@@ -5,6 +5,11 @@
 ### Added
 
 * The status bar and the right-click popup header now show the running version (e.g. `Nonstop v0.2.1`). The status bar reflects the installed extension; the popup reflects the injected webview — so if they ever differ, a stale injection is obvious at a glance.
+* The new `onPermission` / `permissionGraceMs` / `onDecision` / `decisionAnswer` options are now exposed in VS Code Settings (previously only in the right-click popup).
+
+### Changed
+
+* Injection now refreshes on **any** change to the version, seed config, or injected script — not just a version bump. Changing a setting in VS Code Settings now takes effect on the next panel reload, instead of being ignored because the version was unchanged.
 
 ## \[0.2.0] - 2026-06-04
 

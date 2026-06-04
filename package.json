@@ -114,6 +114,36 @@
           "default": "continue, use your best judgment",
           "description": "Neutral answer sent when onQuestion = answer."
         },
+        "nonstop.onPermission": {
+          "type": "string",
+          "enum": [
+            "defer",
+            "approve",
+            "stop"
+          ],
+          "default": "defer",
+          "description": "What to do on a permission popup (\"Allow this command?\"): defer = leave it to another approver (e.g. RTL's YOLO) or you; approve = auto-click the safe \"Yes\" after the grace window; stop = halt and hand it back."
+        },
+        "nonstop.permissionGraceMs": {
+          "type": "number",
+          "default": 10000,
+          "minimum": 0,
+          "description": "Before acting on a permission popup, wait this long so another approver can clear it first. Set HIGHER than your YOLO auto-approve delay so YOLO wins the race."
+        },
+        "nonstop.onDecision": {
+          "type": "string",
+          "enum": [
+            "stop",
+            "best-judgment"
+          ],
+          "default": "stop",
+          "description": "What to do on a decision popup (Claude asks you to choose an option): stop = leave the choice to you (recommended); best-judgment = pick an option and answer with decisionAnswer."
+        },
+        "nonstop.decisionAnswer": {
+          "type": "string",
+          "default": "use your best judgment",
+          "description": "Answer sent when onDecision = best-judgment."
+        },
         "nonstop.doneStallPings": {
           "type": "number",
           "default": 3,

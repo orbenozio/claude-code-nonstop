@@ -36,6 +36,10 @@ function buildSeedConfig(version) {
     quietHours: c.get('quietHours', ''),
     onQuestion: c.get('onQuestion', 'stop'),
     questionAnswer: c.get('questionAnswer', 'continue, use your best judgment'),
+    onPermission: c.get('onPermission', 'defer'),
+    permissionGraceMs: c.get('permissionGraceMs', 10000),
+    onDecision: c.get('onDecision', 'stop'),
+    decisionAnswer: c.get('decisionAnswer', 'use your best judgment'),
     doneStallPings: c.get('doneStallPings', 3),
     sentinelDoneDetection: c.get('sentinelDoneDetection', true),
     rateLimitFallbackMs: c.get('rateLimitFallbackMs', 18000000),
@@ -72,12 +76,15 @@ function injectTarget(target, version, scriptBody, configJson) {
   } catch (_) {
     return false;
   }
-  if (injector.hasValidInjection(content, version)) {
-    return false; // already correct
+  // Compare the *desired* injected content to what's already there, so we refresh on
+  // ANY change — version, seed config, or script body — not just a version bump.
+  // (inject() is canonical: stripping + re-appending an unchanged block is a no-op.)
+  const next = injector.inject(content, version, configJson, scriptBody);
+  if (next === content) {
+    return false; // already current (version + config + code all match)
   }
   ensureBackup(target.indexPath);
 
-  const next = injector.inject(content, version, configJson, scriptBody);
   const ok = writeAndVerify(
     target.indexPath,
     next,
