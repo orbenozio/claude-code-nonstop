@@ -1,66 +1,66 @@
 # Claude Code Nonstop ♾️
 
-תוסף VS Code ששומר על Claude Code ממשיך לעבוד — גם כשנגמרת מגבלת השימוש. כפתור הפעלה/כיבוי בתוך פאנל Claude, "פינג" אוטומטי שממשיך משימות ארוכות, וכשנתקלים ב-rate limit התוסף **ממתין עד שהחלון מתחדש וממשיך את המשימה האחרונה אוטומטית**. שימושי בשעות שינה — אבל לא רק: גם כשפשוט נגמר ה-limit באמצע העבודה, מדליקים ושוכחים.
+A VS Code extension that keeps Claude Code going — even after you hit a usage limit. It adds an on/off toggle inside the Claude panel, automatically "pings" Claude to continue long-running tasks, and when you hit a rate limit it **waits until the window resets and automatically resumes the last task**. Great for overnight runs — but not only: any time your limit runs out mid-work, flip it on and forget about it.
 
-> **סטטוס: בפיתוח (0.1.0).** ליבת ה-host והסקריפט המוזרק קיימים, נבדקו ביוניט-טסטים, ואומתו חי בפאנל. זיהוי ה-rate-limit עצמו ממתין לכיוונון מול מגבלה אמיתית (יש fallback בטוח של המתנה קבועה).
+> **Status: in development (0.1.0).** The host core and the injected script exist, are covered by unit tests, and have been verified live in the panel. Rate-limit detection itself still needs tuning against a real limit (a safe fixed-wait fallback is in place).
 
-## איך זה עובד
+## How it works
 
-ל-VS Code אין API להוספת כפתורים לפאנל של Claude Code, ולכן התוסף משתמש בטכניקת **הזרקת webview** מוכחת:
+VS Code has no API for adding buttons to the Claude Code panel, so the extension uses a proven **webview-injection** technique:
 
-1. בצד ה-host (`src/extension.js`) — מאתר את גרסת Claude Code הפעילה ומצרף את הסקריפט `webview/nonstop.js` לסוף קובץ ה-`webview/index.js` שלה (עם גיבוי וכתיבה אטומית).
-2. הסקריפט המוזרק רץ בתוך ה-DOM של הפאנל: בונה כפתור ב-footer, מזהה מתי Claude ממתין להמשך, ושולח "פינג".
+1. On the host side (`src/extension.js`) it locates the active Claude Code version and appends the `webview/nonstop.js` script to the end of that version's `webview/index.js` file (with a backup and an atomic write).
+2. The injected script runs inside the panel's DOM: it builds a button in the footer, detects when Claude is waiting to continue, and sends a "ping".
 
-ההזרקה **דו-צדדית מבוססת markers** כדי לחיות בשלום לצד תוסף ה-RTL שמזריק לאותו קובץ.
+The injection is **marker-based and two-sided** so it coexists peacefully with the RTL extension that injects into the same file.
 
-## תזמון — מה נשלח ומתי
+## Timing — what gets sent and when
 
-* מנוע ה-`tick` רץ כל שנייה (`pollMs`). **כשכבוי — הוא יוצא מיד; לא נשלח דבר.**
-* כשדלוק, בכל שנייה הוא מזהה מצב ופועל:
-  * **Claude עובד** (הפלט גדל) → ממתין.
-  * **rate limit** → נכנס לשינה עד זמן האיפוס, ואז ממשיך.
-  * **שאלה** → עוצר (או עונה תשובה ניטרלית, לפי `onQuestion`).
-  * **ממתין להמשך** → אם עברו `pingIntervalMs` (60ש') מהפינג האחרון → שולח `pingText` ("continue").
-* לפני כל שליחה: לא בשעות-שקט, אין טיוטה שלך בתיבה, ולא הקלדת בתיבה ב-`userActivityPauseMs` האחרונות.
-* עוצר אוטומטית על: זיהוי סיום, `maxPings`, `maxRuntimeMs`, או כיבוי ידני.
+* The `tick` engine runs every second (`pollMs`). **When off, it exits immediately; nothing is sent.**
+* When on, every second it detects the state and acts:
+  * **Claude is working** (output is growing) → wait.
+  * **Rate limit** → sleep until the reset time, then resume.
+  * **Question** → stop (or send a neutral answer, per `onQuestion`).
+  * **Waiting to continue** → if `pingIntervalMs` (60s) has passed since the last ping → send `pingText` ("continue").
+* Before every send: not in quiet hours, no draft of yours in the input box, and you haven't typed in the box within the last `userActivityPauseMs`.
+* Stops automatically on: completion detection, `maxPings`, `maxRuntimeMs`, or a manual toggle off.
 
-## שימוש
+## Usage
 
-* לחיצה על הכפתור ב-footer מדליקה/מכבה. כשדלוק הוא פועם.
-* פקודות (Command Palette): `Nonstop: Check & Inject`, `Nonstop: Remove Injection`, `Nonstop: Menu`.
-* אחרי הזרקה ראשונה — Reload Window כדי שהסקריפט ייטען.
+* Clicking the footer button toggles it on/off. While on, it pulses.
+* Commands (Command Palette): `Nonstop: Check & Inject`, `Nonstop: Remove Injection`, `Nonstop: Menu`.
+* After the first injection — Reload Window so the script loads.
 
-## הגדרות עיקריות
+## Key settings
 
-| הגדרה | ברירת מחדל | מה |
+| Setting | Default | What |
 | --- | --- | --- |
-| `nonstop.pingText` | `continue` | ההודעה שנשלחת בכל פינג |
-| `nonstop.pingIntervalMs` | `60000` | מרווח מינימלי בין פינגים |
-| `nonstop.maxRuntimeMs` | `28800000` (8ש') | תקרת אורך ריצה (זמן sleep מול rate-limit לא נספר) |
-| `nonstop.maxPings` | `100` | תקרת פינגים |
-| `nonstop.quietHours` | `""` | חלון אופציונלי שבו התוסף משתתק, למשל `09:00-17:00` (בלילה דווקא רץ) |
-| `nonstop.onQuestion` | `stop` | כש-Claude שואל שאלה: `stop` או `answer` |
-| `nonstop.rateLimitFallbackMs` | `18000000` (5ש') | המתנה כשלא ניתן לקבוע זמן איפוס מדויק |
-| `nonstop.debug` | `false` | לוג recon מפורט בקונסול הפאנל |
+| `nonstop.pingText` | `continue` | The message sent on each ping |
+| `nonstop.pingIntervalMs` | `60000` | Minimum interval between pings |
+| `nonstop.maxRuntimeMs` | `28800000` (8h) | Max run length (rate-limit sleep time is not counted) |
+| `nonstop.maxPings` | `100` | Max pings per shift |
+| `nonstop.quietHours` | `""` | Optional window where the extension stays silent, e.g. `09:00-17:00` (so it runs overnight) |
+| `nonstop.onQuestion` | `stop` | When Claude asks a question: `stop` or `answer` |
+| `nonstop.rateLimitFallbackMs` | `18000000` (5h) | Wait time when an exact reset time can't be determined |
+| `nonstop.debug` | `false` | Verbose recon logging in the panel console |
 
-## בטיחות
+## Safety
 
-* **עצירה אמינה = כפתור הכיבוי בפאנל.** (פקודת "Stop Now" מה-host היא best-effort בלבד — אין ערוץ host↔webview ב-MVP.)
-* תקרות `maxRuntime`/`maxPings`, שעות שקט, והשהיה כשמזוהה פעילות משתמש — מונעים לולאה בורחת.
-* מול rate limit התוסף **ישן** עד האיפוס במקום לפנג בלולאה.
+* **Reliable stop = the off button in the panel.** (The host's "Stop Now" command is best-effort only — there is no host↔webview channel in the MVP.)
+* `maxRuntime`/`maxPings` caps, quiet hours, and a pause when user activity is detected all prevent a runaway loop.
+* Against a rate limit the extension **sleeps** until reset instead of pinging in a loop.
 
-## אזהרת מדיניות שימוש (ToS)
+## Terms-of-service warning
 
-המשך אוטומטי לא-מפוקח של מודל עשוי לעמוד בניגוד למדיניות השימוש של הספק ו/או לבזבז מכסה על עבודה לא רצויה. השימוש באחריותכם. ברירות המחדל שמרניות בכוונה.
+Unsupervised, automated continuation of a model may violate the provider's usage policy and/or burn quota on unwanted work. Use at your own risk. The defaults are intentionally conservative.
 
-## פיתוח
+## Development
 
 ```
-npm test     # יוניט-טסטים של ה-host (18 בדיקות)
+npm test     # host unit tests (18 tests)
 ```
 
-ראו [SPEC.md](SPEC.md) לאיפיון המלא, [RECON.md](RECON.md) לממצאי ה-recon, ו-[TASKS.md](TASKS.md) למעקב.
+See [SPEC.md](SPEC.md) for the full spec, [RECON.md](RECON.md) for the recon findings, and [TASKS.md](TASKS.md) for tracking.
 
-## רישוי
+## License
 
-MIT — ראו [LICENSE](LICENSE).
+MIT — see [LICENSE](LICENSE).
