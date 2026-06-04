@@ -7,7 +7,6 @@
 
 ### Phase 3 — המתנה-וחידוש מול rate limit (נותר לאימות חי)
 
-* [ ] איסוף נוסח הודעת ה-rate-limit ב-DOM — **מנגנון הלכידה מוכן** (wide-net → localStorage + `__nonstopDebug.rateLimitCapture()`); ממתין למגבלה אמיתית ואז לתקן את ה-regexes
 * [ ] אימות תקפות token של usage-core בריצה לילית ארוכה
 * [ ] אריזת `bin/usage-core-*` (win32-x64 מקומית; שאר הפלטפורמות בזמן VSIX)
 * [ ] חיבור structured (host) ל-webview (דורש ערוץ host↔webview) — או להישאר על DOM fallback
@@ -23,6 +22,7 @@
 
 ## Done
 
+* [x] **Phase 3 — זיהוי rate-limit אמיתי:** נלכד הנוסח האמיתי ("You've hit your session limit · resets 10:10pm (Asia/Jerusalem)"), תוקנו ה-regexes ו-`parseResetTime` (מאומת מקצה-לקצה). גם ריצת-לילה אמיתית אחת הצליחה: המתין, חידש מאותה נקודה, סיים ב-NONSTOP_DONE.
 * [x] איפיון (SPEC.md v0.1) דרך architect DRAFT
 * [x] ביקורת כפולה: spec-reviewer + architect REVIEW
 * [x] עדכון איפיון ל-v0.2 (החלטות + תיקוני ביקורת + אילוץ מרקטפלייס)
