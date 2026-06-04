@@ -278,7 +278,9 @@
   function buildPingText() {
     var txt = liveCfg('pingText');
     if (CFG.sentinelDoneDetection) {
-      return txt + '\n\n(If the task is fully complete, reply with exactly: ' + CFG.doneSentinel + ')';
+      // Separate with a space, not a newline: line breaks get stripped when the text
+      // is inserted into the plaintext input, which mashed "continue" onto "(If…".
+      return txt + ' (If the task is fully complete, reply with exactly: ' + CFG.doneSentinel + ')';
     }
     return txt;
   }
