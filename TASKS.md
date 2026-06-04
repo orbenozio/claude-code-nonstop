@@ -6,12 +6,14 @@
 ## Todo
 
 ### Phase 3 — המתנה-וחידוש מול rate limit (נותר לאימות חי)
-* [ ] איסוף נוסח הודעת ה-rate-limit ב-DOM (דורש מגבלה אמיתית; debug ON ללכידה)
+
+* [ ] איסוף נוסח הודעת ה-rate-limit ב-DOM — **מנגנון הלכידה מוכן** (wide-net → localStorage + `__nonstopDebug.rateLimitCapture()`); ממתין למגבלה אמיתית ואז לתקן את ה-regexes
 * [ ] אימות תקפות token של usage-core בריצה לילית ארוכה
 * [ ] אריזת `bin/usage-core-*` (win32-x64 מקומית; שאר הפלטפורמות בזמן VSIX)
 * [ ] חיבור structured (host) ל-webview (דורש ערוץ host↔webview) — או להישאר על DOM fallback
 
 ### Phase 4 — ליטוש ואריזה
+
 * [ ] אריזת usage-core לכל הפלטפורמות, VSIX, פרסום למרקטפלייס
 * [ ] ריצת לילה אמיתית מקצה-לקצה (≥5 ערבים) + עמידה במטריקות §8.3
 
@@ -43,3 +45,4 @@
 * [x] שינוי שם התיקייה הפיזית → `claude-code-nonstop` (junctions תקינים — מצביעים ל-Agents המרכזי)
 * [x] עדכון "Night Shift" בתיעוד היסטורי (SPEC.md / RECON.md נקיים)
 * [x] הקשחת דו-קיום עם RTL: reinject גם ב-window focus (onDidChangeWindowState, throttle 30ש') — מצמצם "זמן מת" אחרי שחזור RTL מ-6ש' לשניות
+
