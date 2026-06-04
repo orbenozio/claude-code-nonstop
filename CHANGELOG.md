@@ -1,5 +1,11 @@
 # Changelog
 
+## \[0.2.1] - 2026-06-04
+
+### Added
+
+* The status bar and the right-click popup header now show the running version (e.g. `Nonstop v0.2.1`). The status bar reflects the installed extension; the popup reflects the injected webview — so if they ever differ, a stale injection is obvious at a glance.
+
 ## \[0.2.0] - 2026-06-04
 
 ### Added
