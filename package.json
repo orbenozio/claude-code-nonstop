@@ -10,12 +10,21 @@
     "type": "git",
     "url": "https://github.com/orbenozio/claude-code-nonstop.git"
   },
+  "homepage": "https://github.com/orbenozio/claude-code-nonstop#readme",
+  "bugs": {
+    "url": "https://github.com/orbenozio/claude-code-nonstop/issues"
+  },
   "engines": {
     "vscode": "^1.85.0"
   },
   "categories": [
+    "AI",
     "Other"
   ],
+  "galleryBanner": {
+    "color": "#C9603F",
+    "theme": "dark"
+  },
   "keywords": [
     "claude",
     "claude code",

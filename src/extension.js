@@ -106,7 +106,9 @@ function checkAndInject(context, { interactive = false } = {}) {
   for (const t of targets) {
     if (injectTarget(t, version, scriptBody, configJson)) changed++;
   }
-  return { changed, targets: targets.length };
+  const result = { changed, targets: targets.length };
+  statusBar.reflect(result);
+  return result;
 }
 
 /** Remove only our blocks from every target (never blind-restore — could delete another injection). */

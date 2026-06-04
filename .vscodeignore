@@ -13,3 +13,8 @@ scripts/**
 # usage-core binaries are not wired up yet (no host<->webview channel in MVP);
 # bundle them here once the structured rate-limit source is connected.
 bin/usage-core-*
+
+# Rate-limit modules are not used by the shipped extension at runtime: the webview
+# carries its own copy of the detection/parse logic, structured.js is deferred, and
+# resetTime.js is the test-side spec. Keep them in the repo, out of the VSIX.
+src/ratelimit/**
