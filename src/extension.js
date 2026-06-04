@@ -12,6 +12,12 @@ const { detectRtlInjection } = require('./coexistence');
 const statusBar = require('./statusBar');
 
 let reinjectTimer = null;
+let lastFocusCheck = 0;
+
+// Don't re-scan the target file more than once per this window on rapid focus
+// toggles (alt-tabbing). Long enough to avoid fs thrash, short enough that the
+// "dead window" after an RTL restore is effectively gone.
+const FOCUS_REINJECT_THROTTLE_MS = 30000;
 
 function getConfig() {
   return vscode.workspace.getConfiguration('nonstop');
@@ -130,6 +136,27 @@ function scheduleReinject(context) {
   context.subscriptions.push({ dispose: () => clearInterval(reinjectTimer) });
 }
 
+/**
+ * Re-check/re-inject when the VS Code window regains focus.
+ *
+ * Host-side analog of a webview `focus`/`visibilitychange` handler: RTL's restore
+ * can slice our block off the end of webview/index.js, and waiting up to
+ * `reinjectCheckHours` (default 6h) to recover leaves a long window where Nonstop
+ * is gone. Re-checking on focus shrinks that window to the next time you touch
+ * VS Code. Throttled so rapid focus toggles don't hammer the filesystem.
+ */
+function registerFocusReinject(context) {
+  context.subscriptions.push(
+    vscode.window.onDidChangeWindowState((state) => {
+      if (!state.focused) return;
+      const now = Date.now();
+      if (now - lastFocusCheck < FOCUS_REINJECT_THROTTLE_MS) return;
+      lastFocusCheck = now;
+      checkAndInject(context, { interactive: false });
+    })
+  );
+}
+
 /** Re-inject after a Nonstop version change (refreshes the injected script). */
 function handleVersionUpgrade(context) {
   const version = context.extension.packageJSON.version;
@@ -194,6 +221,7 @@ function activate(context) {
   const r = checkAndInject(context, { interactive: false });
   if (r.changed > 0) offerReload();
   scheduleReinject(context);
+  registerFocusReinject(context);
 }
 
 function deactivate() {

@@ -12,7 +12,6 @@
 * [ ] חיבור structured (host) ל-webview (דורש ערוץ host↔webview) — או להישאר על DOM fallback
 
 ### Phase 4 — ליטוש ואריזה
-* [ ] הקשחת דו-קיום עם RTL: reinject ב-visibilitychange/focus (לצמצם "זמן מת")
 * [ ] אריזת usage-core לכל הפלטפורמות, VSIX, פרסום למרקטפלייס
 * [ ] ריצת לילה אמיתית מקצה-לקצה (≥5 ערבים) + עמידה במטריקות §8.3
 
@@ -43,3 +42,4 @@
 * [x] git: gh נמצא + הוסף ל-PATH הקבוע (דורש restart ל-VS Code)
 * [x] שינוי שם התיקייה הפיזית → `claude-code-nonstop` (junctions תקינים — מצביעים ל-Agents המרכזי)
 * [x] עדכון "Night Shift" בתיעוד היסטורי (SPEC.md / RECON.md נקיים)
+* [x] הקשחת דו-קיום עם RTL: reinject גם ב-window focus (onDidChangeWindowState, throttle 30ש') — מצמצם "זמן מת" אחרי שחזור RTL מ-6ש' לשניות
