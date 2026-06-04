@@ -5,16 +5,14 @@
 
 ## Todo
 
-### Phase 3 — המתנה-וחידוש מול rate limit (נותר לאימות חי)
-
-* [ ] אימות תקפות token של usage-core בריצה לילית ארוכה
-* [ ] אריזת `bin/usage-core-*` (win32-x64 מקומית; שאר הפלטפורמות בזמן VSIX)
-* [ ] חיבור structured (host) ל-webview (דורש ערוץ host↔webview) — או להישאר על DOM fallback
-
 ### Phase 4 — ליטוש ואריזה
 
-* [ ] אריזת usage-core לכל הפלטפורמות, VSIX, פרסום למרקטפלייס
+* [ ] VSIX + פרסום ל-VS Code Marketplace (vsce publish — דורש publisher + PAT)
 * [ ] ריצת לילה אמיתית מקצה-לקצה (≥5 ערבים) + עמידה במטריקות §8.3
+
+## Decisions
+
+* **usage-core (structured rate-limit) — נדחה מה-MVP.** זיהוי ה-rate-limit מבוסס-DOM אומת חי ומדויק (כולל timezone-aware), אז אין הצדקה לערוץ host↔webview + אריזת בינארי לכל פלטפורמה. `src/ratelimit/structured.js` נשאר ב-repo כאופציה עתידית (עם טסטים), אך אינו מחווט ואינו פעיל. אם בעתיד נרצה מקור אמת עמיד-יותר-מ-DOM — נחזור לזה.
 
 ## In progress
 

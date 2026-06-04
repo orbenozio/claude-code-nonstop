@@ -11,6 +11,7 @@ const injector = require('../src/injector');
 const { detectOtherInjection } = require('../src/coexistence');
 const { writeAtomic, writeAndVerify } = require('../src/atomicWrite');
 const { parseUsage } = require('../src/ratelimit/structured');
+const { detectRateLimit, parseResetTime } = require('../src/ratelimit/resetTime');
 const { versionFromDirName } = require('../src/targets/claude-code');
 
 let passed = 0;
@@ -157,6 +158,62 @@ test('resets_at in seconds and ISO string both parse to ms', () => {
 console.log('\ntargets.versionFromDirName');
 test('extracts version from a Claude Code dir name', () => {
   assert.strictEqual(versionFromDirName('anthropic.claude-code-2.1.161-win32-x64'), '2.1.161');
+});
+
+console.log('\nratelimit.resetTime — detection');
+test('detects the real session-limit notice and captures the time', () => {
+  const msg = "You've hit your session limit · resets 10:10pm (Asia/Jerusalem)";
+  const r = detectRateLimit(msg);
+  assert.ok(r && r.matched, 'should detect');
+  assert.strictEqual(r.captured, '10:10pm (Asia/Jerusalem)');
+});
+test('detects a bare limit mention (no time) → captured null', () => {
+  const r = detectRateLimit('Sorry, you have hit your usage limit for now.');
+  assert.ok(r && r.matched);
+  assert.strictEqual(r.captured, null);
+});
+test('normal conversation text is not a rate limit', () => {
+  assert.strictEqual(detectRateLimit('Here is the function you asked for.'), null);
+});
+
+console.log('\nratelimit.resetTime — parse (timezone-aware)');
+test('resolves time in the reported IANA zone (independent of host TZ)', () => {
+  const t = parseResetTime('10:10pm (Asia/Jerusalem)', Date.parse('2026-06-04T10:00:00Z'));
+  assert.strictEqual(t, Date.parse('2026-06-04T19:10:00Z')); // 22:10 IDT = 19:10Z
+});
+test('same notice → same instant regardless of when in the day "now" is', () => {
+  const a = parseResetTime('10:10pm (Asia/Jerusalem)', Date.parse('2026-06-04T05:00:00Z'));
+  assert.strictEqual(a, Date.parse('2026-06-04T19:10:00Z'));
+});
+test('already-passed time today rolls to tomorrow (in the zone)', () => {
+  // now = 20:00Z = 23:00 Jerusalem, past 22:10 → next is tomorrow.
+  const t = parseResetTime('10:10pm (Asia/Jerusalem)', Date.parse('2026-06-04T20:00:00Z'));
+  assert.strictEqual(t, Date.parse('2026-06-05T19:10:00Z'));
+});
+test('DST zone resolved correctly (America/New_York, summer = EDT)', () => {
+  const t = parseResetTime('10:10pm (America/New_York)', Date.parse('2026-07-01T12:00:00Z'));
+  assert.strictEqual(t, Date.parse('2026-07-02T02:10:00Z')); // 22:10 EDT = 02:10Z next day
+});
+test('noon and midnight map correctly (Etc/UTC)', () => {
+  assert.strictEqual(parseResetTime('12:00pm (Etc/UTC)', Date.parse('2026-06-04T05:00:00Z')),
+    Date.parse('2026-06-04T12:00:00Z'));
+  assert.strictEqual(parseResetTime('12:00am (Etc/UTC)', Date.parse('2026-06-04T05:00:00Z')),
+    Date.parse('2026-06-05T00:00:00Z')); // 00:00 already passed at 05:00 → tomorrow
+});
+test('24-hour format without am/pm (Etc/UTC)', () => {
+  assert.strictEqual(parseResetTime('15:30 (Etc/UTC)', Date.parse('2026-06-04T10:00:00Z')),
+    Date.parse('2026-06-04T15:30:00Z'));
+});
+test('unparseable input → 0', () => {
+  assert.strictEqual(parseResetTime('soon-ish', Date.now()), 0);
+  assert.strictEqual(parseResetTime('', Date.now()), 0);
+});
+
+console.log('\nwebview parity (drift guard)');
+test('webview embeds the canonical primary rate-limit regex', () => {
+  const src = fs.readFileSync(path.join(__dirname, '..', 'webview', 'nonstop.js'), 'utf8');
+  assert.ok(src.indexOf('hit your (?:session|usage|rate) limit') !== -1,
+    'webview/nonstop.js must keep the primary regex in sync with src/ratelimit/resetTime.js');
 });
 
 console.log('\n' + (failed === 0 ? 'ALL PASS' : 'FAILURES') + `: ${passed} passed, ${failed} failed\n`);
