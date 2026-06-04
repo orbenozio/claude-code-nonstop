@@ -83,7 +83,10 @@
   var SIGNALS = {
     footer: '[class*="inputFooter_"]',
     input: 'div[contenteditable="plaintext-only"][role="textbox"]',
-    primaryButtonContainer: '[class*="footerButtonPrimary_"]',
+    // Native Auto/Plan permission-mode button in the footer (carries
+    // footerButtonPrimary_; confirmed against the live panel — it wraps a
+    // <span> like "Auto mode"). We dock our ♾️ right after it.
+    modeButton: '[class*="footerButtonPrimary_"]',
     // TUNE: indicators of an in-progress turn (stop/interrupt button, spinner).
     workingHints: ['[aria-label*="Stop" i]', '[aria-label*="Interrupt" i]', '[class*="streaming_"]', '[class*="loading_"]'],
     // TUNE: approval / question UI (typically a Yes radio + Submit).
@@ -242,8 +245,9 @@
   function findSendButton() {
     var footer = $(SIGNALS.footer);
     if (!footer) return null;
-    // TUNE: the actual send button selector. Try an aria-label, else the primary btn.
-    return $('[aria-label*="Send" i]', footer) || $(SIGNALS.primaryButtonContainer + ' button', footer) || null;
+    // TUNE (Phase 3): confirm the real send-button selector against the live panel.
+    // Note: footerButtonPrimary_ is the MODE button, not send — so we can't key off it here.
+    return $('[aria-label*="Send" i]', footer) || null;
   }
 
   function buildPingText() {
@@ -539,7 +543,9 @@
     var st = document.createElement('style');
     st.id = 'nonstop-style';
     st.textContent =
-      // OFF: greyed out & dim (like the YOLO arm when off).
+      // Own wrapper so we sit as a self-contained item next to the mode button.
+      '#nonstop-nav{display:inline-flex;align-items:center;}' +
+      // OFF: greyed out & dim.
       '#nonstop-btn{background:transparent;border:none;cursor:pointer;font-size:15px;' +
       'padding:2px 6px;line-height:1;vertical-align:middle;' +
       'filter:grayscale(1) brightness(0.85);opacity:0.5;transition:opacity .15s,filter .15s;}' +
@@ -566,19 +572,21 @@
     btn.addEventListener('click', function (e) { e.preventDefault(); e.stopPropagation(); toggleShift(); });
     btn.addEventListener('contextmenu', function (e) { e.preventDefault(); e.stopPropagation(); showSettingsPopup(e); });
 
-    // If a co-installed extension adds its own button nav (id "rtl-msg-nav"), sit
-    // next to it as a sibling so we survive it re-rendering that <nav>. Otherwise
-    // fall back to before the primary (send/permission) container, then footer end.
-    var siblingNav = footer.querySelector('#rtl-msg-nav') || document.getElementById('rtl-msg-nav');
-    if (siblingNav && siblingNav.parentNode) {
-      siblingNav.parentNode.insertBefore(btn, siblingNav.nextSibling);
+    // Give the button its own wrapper and place it just to the LEFT of Claude's
+    // native mode button (the "Auto mode" / permission picker) — present for every
+    // user, no extension required. Fall back to the footer end.
+    var wrap = document.createElement('div');
+    wrap.id = 'nonstop-nav';
+    wrap.appendChild(btn);
+    var modeBtn = footer.querySelector(SIGNALS.modeButton);
+    var modeContainer = modeBtn ? modeBtn.parentElement : null;
+    if (modeContainer && modeContainer.parentNode) {
+      modeContainer.parentNode.insertBefore(wrap, modeContainer);
     } else {
-      var primary = footer.querySelector(SIGNALS.primaryButtonContainer);
-      if (primary && primary.parentNode) primary.parentNode.insertBefore(btn, primary);
-      else footer.appendChild(btn);
+      footer.appendChild(wrap);
     }
     updateButton();
-    log('button injected next to', siblingNav ? 'sibling nav' : 'footer primary');
+    log('button injected', modeContainer ? 'left of mode button' : 'at footer end');
   }
   function updateButton() {
     var btn = document.getElementById('nonstop-btn');
