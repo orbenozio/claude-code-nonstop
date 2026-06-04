@@ -4,6 +4,7 @@
 
 ### Fixed
 
+* **A shift no longer gets orphaned by a window reload.** Ownership of a shift was pinned to the webview instance id, so after any reload the new instance saw the shift as "on" but not owned by it and did nothing — the shift silently stalled until manually toggled. Ownership is now a heartbeat lease: a live panel takes over automatically when the previous owner's lease goes stale. This is the most likely cause of "turned it on overnight and it never resumed".
 * **Shift no longer dies during a rate limit it didn't precisely detect.** If a usage limit hit but the exact notice wasn't matched, output stopped growing, the stall detector mistook it for "task done", and the shift stopped, so nothing resumed after the reset. Now, before declaring done on a stall, a wide net checks for any limit-looking text and sleeps (waiting out the reset) instead of stopping. `enterSleep` also tries harder to parse the reset time from surrounding text.
 
 ### Added
