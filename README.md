@@ -64,10 +64,8 @@ Unsupervised, automated continuation of a model may violate the provider's usage
 ## Development
 
 ```
-npm test     # host unit tests (18 tests)
+npm test     # host unit tests (31 tests)
 ```
-
-See [SPEC.md](SPEC.md) for the full spec, [RECON.md](RECON.md) for the recon findings, and [TASKS.md](TASKS.md) for tracking.
 
 ## License
 
