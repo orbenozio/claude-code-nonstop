@@ -464,19 +464,64 @@
   }
 
   // Parse a human reset time like "10:10pm (Asia/Jerusalem)" / "3:30 PM" / "15:30"
-  // into a future timestamp. Any "(Timezone)" suffix is ignored — the time is read
-  // as local, which is correct when Claude reports the reset in the user's own zone.
+  // into a future timestamp. If an IANA "(Zone)" is present we resolve the time IN
+  // that zone — correct worldwide, even when the user's OS clock is in a different
+  // timezone than the one Claude reports. Without a zone we read it as local time.
   function parseResetTime(str) {
     if (!str) return 0;
-    var m = String(str).match(/(\d{1,2}):(\d{2})\s*(am|pm)?/i);
+    var s = String(str);
+    var m = s.match(/(\d{1,2}):(\d{2})\s*(am|pm)?/i);
     if (!m) return 0;
     var h = +m[1], min = +m[2];
     if (m[3]) { var pm = /pm/i.test(m[3]); if (pm && h < 12) h += 12; if (!pm && h === 12) h = 0; }
+
+    var tz = null;
+    var tzm = s.match(/\(([A-Za-z]+(?:\/[A-Za-z0-9_+\-]+)+)\)/); // e.g. (Asia/Jerusalem)
+    if (tzm && isValidTimeZone(tzm[1])) tz = tzm[1];
+
+    var until = tz ? nextTimeInZone(h, min, tz) : nextLocalTime(h, min);
+    if (!until) return 0;
+    // jitter 30–120s so we don't all wake at the exact reset instant.
+    return until + (30000 + Math.floor(Math.random() * 90000));
+  }
+
+  function nextLocalTime(h, min) {
     var d = new Date();
     d.setHours(h, min, 0, 0);
     if (d.getTime() <= Date.now()) d.setDate(d.getDate() + 1); // already passed → tomorrow
-    // jitter 30–120s so we don't all wake at the exact reset instant.
-    return d.getTime() + (30000 + Math.floor(Math.random() * 90000));
+    return d.getTime();
+  }
+
+  function isValidTimeZone(tz) {
+    try { Intl.DateTimeFormat('en-US', { timeZone: tz }); return true; } catch (e) { return false; }
+  }
+
+  // Offset (ms) between a tz's wall-clock reading of `epoch` and real UTC.
+  function zoneOffsetMs(epoch, tz) {
+    var dtf = new Intl.DateTimeFormat('en-US', {
+      timeZone: tz, hour12: false,
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit',
+    });
+    var p = {};
+    dtf.formatToParts(new Date(epoch)).forEach(function (x) { p[x.type] = x.value; });
+    var asUTC = Date.UTC(+p.year, +p.month - 1, +p.day, +(p.hour === '24' ? 0 : p.hour), +p.minute, +p.second);
+    return asUTC - epoch;
+  }
+
+  // Epoch for the next occurrence of HH:MM in timezone `tz` (today there, else tomorrow).
+  function nextTimeInZone(h, min, tz) {
+    var now = Date.now();
+    var dtf = new Intl.DateTimeFormat('en-US', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' });
+    var p = {};
+    dtf.formatToParts(new Date(now)).forEach(function (x) { p[x.type] = x.value; });
+    for (var addDay = 0; addDay <= 1; addDay++) {
+      var guess = Date.UTC(+p.year, +p.month - 1, +p.day + addDay, h, min, 0);
+      var epoch = guess - zoneOffsetMs(guess, tz);
+      epoch = guess - zoneOffsetMs(epoch, tz); // refine once for DST boundaries
+      if (epoch > now) return epoch;
+    }
+    return 0;
   }
 
   // ── The ON/OFF button ─────────────────────────────────────────────────────────
