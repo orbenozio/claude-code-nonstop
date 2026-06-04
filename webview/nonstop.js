@@ -63,6 +63,7 @@
     pingCount: 'nonstop-ping-count',
     ownerId: 'nonstop-owner-id',
     sleptAccum: 'nonstop-slept-accum-ms',
+    rlCapture: 'nonstop-rl-capture', // Phase 3: stashed real rate-limit notice
   };
   function lsGet(k, d) { try { var v = localStorage.getItem(k); return v === null ? d : v; } catch (e) { return d; } }
   function lsSet(k, v) { try { localStorage.setItem(k, String(v)); } catch (e) {} }
@@ -179,6 +180,27 @@
       if (m) return { matched: true, captured: m[1] || null };
     }
     return null;
+  }
+
+  // ── Phase 3 capture ───────────────────────────────────────────────────────────
+  // The detection regexes above are unverified guesses. Until we've seen a real
+  // usage-limit notice we cast a WIDE keyword net here (recall over precision — this
+  // never triggers sleeping, only stashing) and persist a context snippet + timestamp
+  // to localStorage. That way a real overnight hit is recoverable even if DevTools
+  // was closed: read window.__nonstopDebug.rateLimitCapture() afterwards.
+  var RL_CAPTURE_RE = /(usage limit|rate limit|limit reached|limit will reset|resets?\s+(?:at|in)\b|too many requests|\b429\b|approaching your usage)/i;
+  function captureRateLimitCandidate() {
+    var text = panelText();
+    if (!text) return;
+    var tail = text.slice(-4000);
+    var idx = tail.search(RL_CAPTURE_RE);
+    if (idx < 0) return;
+    var snippet = tail.slice(Math.max(0, idx - 200), idx + 500).replace(/\s+/g, ' ').trim();
+    var prev = '';
+    try { prev = (JSON.parse(lsGet(LS.rlCapture, '') || '{}').snippet) || ''; } catch (e) {}
+    if (prev === snippet) return; // unchanged → don't re-log/re-store
+    lsSet(LS.rlCapture, JSON.stringify({ at: new Date().toISOString(), snippet: snippet }));
+    log('⚠️ RATE-LIMIT CANDIDATE captured (read __nonstopDebug.rateLimitCapture()):', snippet);
   }
 
   // Returns one of WORKING / WAITING_QUESTION / WAITING_CONTINUE / RATE_LIMITED / DONE / UNKNOWN
@@ -349,6 +371,10 @@
   function tick() {
     if (!isEnabled()) return;
     if (!isOwner()) return; // another panel owns this shift
+
+    // Phase 3: always try to capture a real limit notice while a shift runs —
+    // even during the sleep window below, since that's when it's on screen.
+    captureRateLimitCandidate();
 
     // Hard backstops first.
     if (runtimeExceeded()) { stopShift('maxRuntime'); return; }
@@ -626,6 +652,9 @@
     config: CFG,
     instance: INSTANCE_ID,
     dumpFooter: function () { var f = $(SIGNALS.footer); return f ? f.outerHTML : '(no footer)'; },
+    // Phase 3 helpers: read or clear the stashed real rate-limit notice.
+    rateLimitCapture: function () { return lsGet(LS.rlCapture, '(none captured)'); },
+    clearRateLimitCapture: function () { lsSet(LS.rlCapture, ''); return 'cleared'; },
   };
 
   log('initialized', { instance: INSTANCE_ID, debug: CFG.debug });
