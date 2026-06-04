@@ -6,8 +6,8 @@ const path = require('path');
 /**
  * Atomic file write: write to a temp file in the same directory, then rename over
  * the target. Rename is atomic on the same filesystem, so a concurrent reader
- * never sees a half-written file. Mitigates the write race with the RTL extension
- * (SPEC.md §6.4 / §7.2).
+ * never sees a half-written file. Mitigates the write race with another extension
+ * editing the same file (SPEC.md §6.4 / §7.2).
  */
 function writeAtomic(filePath, content) {
   const dir = path.dirname(filePath);

@@ -15,7 +15,7 @@ const path = require('path');
 const injector = require('../src/injector');
 const { writeAndVerify } = require('../src/atomicWrite');
 const { scanAllInstalls } = require('../src/targets/claude-code');
-const { detectRtlInjection } = require('../src/coexistence');
+const { detectOtherInjection } = require('../src/coexistence');
 const { BACKUP_SUFFIX } = require('../src/constants');
 
 const VERSION = require('../package.json').version;
@@ -61,6 +61,6 @@ for (const t of targets) {
   if (!fs.existsSync(bp)) fs.copyFileSync(t.indexPath, bp);
   const next = injector.inject(content, VERSION, cfgJson, scriptBody);
   const ok = writeAndVerify(t.indexPath, next, (w) => injector.hasValidInjection(w, VERSION));
-  console.log(`${ok ? 'INJECTED' : 'INJECT-FAILED'}: ${t.name}  (RTL present: ${detectRtlInjection(next)}, backup: ${path.basename(bp)})`);
+  console.log(`${ok ? 'INJECTED' : 'INJECT-FAILED'}: ${t.name}  (other injection present: ${detectOtherInjection(next)}, backup: ${path.basename(bp)})`);
 }
 console.log(REMOVE ? 'Done. Reload the Claude Code window.' : 'Done. Reload the Claude Code window to load Nonstop (button: ♾️).');

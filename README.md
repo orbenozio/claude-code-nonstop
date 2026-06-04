@@ -11,7 +11,7 @@ VS Code has no API for adding buttons to the Claude Code panel, so the extension
 1. On the host side (`src/extension.js`) it locates the active Claude Code version and appends the `webview/nonstop.js` script to the end of that version's `webview/index.js` file (with a backup and an atomic write).
 2. The injected script runs inside the panel's DOM: it builds a button in the footer, detects when Claude is waiting to continue, and sends a "ping".
 
-The injection is **marker-based and two-sided** so it coexists peacefully with the RTL extension that injects into the same file.
+The injection is **marker-based and two-sided** so it coexists peacefully with any other extension that injects into the same file.
 
 ## Timing — what gets sent and when
 

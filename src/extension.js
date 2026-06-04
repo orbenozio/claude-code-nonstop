@@ -8,7 +8,7 @@ const { BACKUP_SUFFIX, DONE_SENTINEL } = require('./constants');
 const injector = require('./injector');
 const { writeAndVerify } = require('./atomicWrite');
 const { resolveTargets } = require('./targets/claude-code');
-const { detectRtlInjection } = require('./coexistence');
+const { detectOtherInjection } = require('./coexistence');
 const statusBar = require('./statusBar');
 
 let reinjectTimer = null;
@@ -16,7 +16,7 @@ let lastFocusCheck = 0;
 
 // Don't re-scan the target file more than once per this window on rapid focus
 // toggles (alt-tabbing). Long enough to avoid fs thrash, short enough that the
-// "dead window" after an RTL restore is effectively gone.
+// "dead window" after the file was clobbered is effectively gone.
 const FOCUS_REINJECT_THROTTLE_MS = 30000;
 
 function getConfig() {
@@ -53,9 +53,9 @@ function backupPathFor(indexPath) {
   return indexPath + BACKUP_SUFFIX;
 }
 
-/** Ensure a backup exists. Note: if RTL already injected, the backup will contain
- *  RTL's injection — that's acceptable (see SPEC.md §6.4); we never rely on it for
- *  a pristine restore, only for emergency recovery. */
+/** Ensure a backup exists. Note: if another extension already injected, the backup
+ *  will contain that injection — that's acceptable (see SPEC.md §6.4); we never rely
+ *  on it for a pristine restore, only for emergency recovery. */
 function ensureBackup(indexPath) {
   const bp = backupPathFor(indexPath);
   if (!fs.existsSync(bp)) {
@@ -86,9 +86,9 @@ function injectTarget(target, version, scriptBody, configJson) {
   if (!ok) {
     console.error(`[Nonstop] write race not resolved for ${target.indexPath}`);
   }
-  // Touching RTL? We never remove it; just note coexistence for diagnostics.
-  if (detectRtlInjection(next)) {
-    console.log('[Nonstop] coexisting with RTL injection in', target.name);
+  // Another injection present? We never remove it; just note coexistence for diagnostics.
+  if (detectOtherInjection(next)) {
+    console.log('[Nonstop] coexisting with another injection in', target.name);
   }
   return ok;
 }
@@ -109,7 +109,7 @@ function checkAndInject(context, { interactive = false } = {}) {
   return { changed, targets: targets.length };
 }
 
-/** Remove only our blocks from every target (never blind-restore — could delete RTL). */
+/** Remove only our blocks from every target (never blind-restore — could delete another injection). */
 function removeInjection() {
   const targets = resolveTargets(vscode);
   let changed = 0;
@@ -139,11 +139,10 @@ function scheduleReinject(context) {
 /**
  * Re-check/re-inject when the VS Code window regains focus.
  *
- * Host-side analog of a webview `focus`/`visibilitychange` handler: RTL's restore
- * can slice our block off the end of webview/index.js, and waiting up to
- * `reinjectCheckHours` (default 6h) to recover leaves a long window where Nonstop
- * is gone. Re-checking on focus shrinks that window to the next time you touch
- * VS Code. Throttled so rapid focus toggles don't hammer the filesystem.
+ * Something else can edit the shared Claude webview/index.js and remove our block;
+ * waiting up to `reinjectCheckHours` (default 6h) to recover leaves a long window
+ * where Nonstop is gone. Re-checking on focus shrinks that window to the next time
+ * you touch VS Code. Throttled so rapid focus toggles don't hammer the filesystem.
  */
 function registerFocusReinject(context) {
   context.subscriptions.push(

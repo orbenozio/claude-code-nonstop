@@ -4,7 +4,7 @@
  * Safe end-to-end integration test against a COPY of the real Claude Code bundle.
  * Reads the live index.js read-only, runs the full inject/strip pipeline on a copy,
  * and asserts the output is valid JavaScript, has exactly one Nonstop block,
- * and preserves any RTL injection. The user's real install is never modified.
+ * and preserves any other extension's injection. The user's real install is never modified.
  *
  * Usage: node test/integration-real.js "<path-to-claude index.js>"
  */
@@ -15,7 +15,7 @@ const path = require('path');
 const cp = require('child_process');
 
 const injector = require('../src/injector');
-const { detectRtlInjection } = require('../src/coexistence');
+const { detectOtherInjection } = require('../src/coexistence');
 
 const indexPath = process.argv[2];
 if (!indexPath || !fs.existsSync(indexPath)) {
@@ -24,7 +24,7 @@ if (!indexPath || !fs.existsSync(indexPath)) {
 }
 
 const original = fs.readFileSync(indexPath, 'utf8');
-const hadRtl = detectRtlInjection(original);
+const hadOther = detectOtherInjection(original);
 const scriptBody = fs.readFileSync(path.join(__dirname, '..', 'webview', 'nonstop.js'), 'utf8');
 const cfgJson = JSON.stringify({ pingText: 'continue', debug: false });
 const V = '0.1.0';
@@ -41,7 +41,7 @@ let ok = true;
 function check(name, cond) { console.log((cond ? '  ✓ ' : '  ✗ ') + name); if (!cond) ok = false; }
 
 console.log('\nintegration (real bundle copy)');
-console.log('  source:', indexPath, '| RTL present:', hadRtl, '| size:', original.length);
+console.log('  source:', indexPath, '| other injection present:', hadOther, '| size:', original.length);
 
 // 1) inject
 const injected = injector.inject(original, V, cfgJson, scriptBody);
@@ -49,12 +49,12 @@ fs.writeFileSync(copyPath, injected, 'utf8');
 check('injected output is valid JS (node --check)', nodeCheck(copyPath));
 check('exactly one Nonstop block', injector.findBlocks(injected).length === 1);
 check('injection valid for version', injector.hasValidInjection(injected, V));
-check('RTL preserved (if it was present)', hadRtl ? detectRtlInjection(injected) : true);
+check('other injection preserved (if it was present)', hadOther ? detectOtherInjection(injected) : true);
 
 // 2) re-inject (idempotent)
 const reinjected = injector.inject(injected, V, cfgJson, scriptBody);
 check('re-inject keeps a single block', injector.findBlocks(reinjected).length === 1);
-check('RTL still preserved after re-inject', hadRtl ? detectRtlInjection(reinjected) : true);
+check('other injection still preserved after re-inject', hadOther ? detectOtherInjection(reinjected) : true);
 
 // 3) strip restores to original bytes
 const stripped = injector.stripAllBlocks(injected);

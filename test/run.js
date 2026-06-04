@@ -8,7 +8,7 @@ const os = require('os');
 const path = require('path');
 
 const injector = require('../src/injector');
-const { detectRtlInjection } = require('../src/coexistence');
+const { detectOtherInjection } = require('../src/coexistence');
 const { writeAtomic, writeAndVerify } = require('../src/atomicWrite');
 const { parseUsage } = require('../src/ratelimit/structured');
 const { versionFromDirName } = require('../src/targets/claude-code');
@@ -23,7 +23,9 @@ function test(name, fn) {
 const V = '0.1.0';
 const SCRIPT = '(function(){/* ns */})();';
 const CFGJSON = JSON.stringify({ pingText: 'continue' });
-const RTL_BLOCK = '\n\n// RTL for VS Code Agents (injected)\nwindow.__RTL_CONFIG__={};\n/* rtl body */\n';
+// Fixture simulating another extension's injection. The marker substring must
+// match FOREIGN_MARKER so detectOtherInjection sees it.
+const OTHER_BLOCK = '\n\n// RTL for VS Code Agents (injected)\nwindow.__OTHER_CONFIG__={};\n/* other body */\n';
 
 console.log('\ninjector');
 test('inject into clean content yields exactly one valid block', () => {
@@ -48,26 +50,26 @@ test('version change invalidates injection (triggers reinject)', () => {
   assert.ok(!injector.hasValidInjection(out, '0.2.0'), 'different version is not valid');
 });
 
-test('RTL injection AFTER our block survives our strip/reinject', () => {
+test('another injection AFTER our block survives our strip/reinject', () => {
   let out = injector.inject('base', V, CFGJSON, SCRIPT);
-  out = out + RTL_BLOCK; // RTL appends after us
-  assert.ok(detectRtlInjection(out));
-  // Re-inject (e.g. settings change): our block refreshed, RTL untouched.
+  out = out + OTHER_BLOCK; // the other extension appends after us
+  assert.ok(detectOtherInjection(out));
+  // Re-inject (e.g. settings change): our block refreshed, the other untouched.
   const re = injector.inject(out, V, CFGJSON, SCRIPT);
-  assert.ok(detectRtlInjection(re), 'RTL must still be present');
+  assert.ok(detectOtherInjection(re), 'the other injection must still be present');
   assert.strictEqual(injector.findBlocks(re).length, 1, 'one Nonstop block');
 });
 
-test('RTL injection BEFORE our block is preserved', () => {
-  const base = 'base' + RTL_BLOCK;
+test('another injection BEFORE our block is preserved', () => {
+  const base = 'base' + OTHER_BLOCK;
   const out = injector.inject(base, V, CFGJSON, SCRIPT);
-  assert.ok(detectRtlInjection(out));
+  assert.ok(detectOtherInjection(out));
   assert.strictEqual(injector.findBlocks(out).length, 1);
 });
 
 test('fossilized duplicate Nonstop blocks are normalized to one', () => {
   let out = injector.inject('base', V, CFGJSON, SCRIPT);
-  // Simulate a leftover older block (e.g. from an RTL restore that re-introduced it).
+  // Simulate a leftover older block (e.g. from another extension's restore that re-introduced it).
   const dup = injector.buildBlock('0.0.9', CFGJSON, SCRIPT);
   out = out + '\n' + dup + '\n';
   assert.strictEqual(injector.findBlocks(out).length, 2, 'precondition: two blocks');
@@ -86,7 +88,7 @@ test('malformed block (open without close) is cleaned up', () => {
 });
 
 test('stripAllBlocks on content without our markers is a no-op', () => {
-  const base = 'no markers here' + RTL_BLOCK;
+  const base = 'no markers here' + OTHER_BLOCK;
   assert.strictEqual(injector.stripAllBlocks(base), base);
 });
 

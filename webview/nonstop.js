@@ -86,7 +86,7 @@
     primaryButtonContainer: '[class*="footerButtonPrimary_"]',
     // TUNE: indicators of an in-progress turn (stop/interrupt button, spinner).
     workingHints: ['[aria-label*="Stop" i]', '[aria-label*="Interrupt" i]', '[class*="streaming_"]', '[class*="loading_"]'],
-    // TUNE: approval / question UI (YOLO in RTL keys off a Yes radio + Submit).
+    // TUNE: approval / question UI (typically a Yes radio + Submit).
     questionHints: ['[role="radiogroup"]', '[class*="approval_"]', '[class*="permission_"]'],
     // TUNE: rate-limit message phrasing (server-streamed text, collected in Phase 3).
     rateLimitRegexes: [
@@ -566,19 +566,19 @@
     btn.addEventListener('click', function (e) { e.preventDefault(); e.stopPropagation(); toggleShift(); });
     btn.addEventListener('contextmenu', function (e) { e.preventDefault(); e.stopPropagation(); showSettingsPopup(e); });
 
-    // Prefer to sit right next to the RTL button group (the YOLO arm) as a sibling,
-    // so it survives RTL re-rendering its own <nav>. Fall back to before the primary
-    // (send/permission) container, then to the footer end.
-    var rtlNav = footer.querySelector('#rtl-msg-nav') || document.getElementById('rtl-msg-nav');
-    if (rtlNav && rtlNav.parentNode) {
-      rtlNav.parentNode.insertBefore(btn, rtlNav.nextSibling);
+    // If a co-installed extension adds its own button nav (id "rtl-msg-nav"), sit
+    // next to it as a sibling so we survive it re-rendering that <nav>. Otherwise
+    // fall back to before the primary (send/permission) container, then footer end.
+    var siblingNav = footer.querySelector('#rtl-msg-nav') || document.getElementById('rtl-msg-nav');
+    if (siblingNav && siblingNav.parentNode) {
+      siblingNav.parentNode.insertBefore(btn, siblingNav.nextSibling);
     } else {
       var primary = footer.querySelector(SIGNALS.primaryButtonContainer);
       if (primary && primary.parentNode) primary.parentNode.insertBefore(btn, primary);
       else footer.appendChild(btn);
     }
     updateButton();
-    log('button injected next to', rtlNav ? 'RTL nav' : 'footer primary');
+    log('button injected next to', siblingNav ? 'sibling nav' : 'footer primary');
   }
   function updateButton() {
     var btn = document.getElementById('nonstop-btn');

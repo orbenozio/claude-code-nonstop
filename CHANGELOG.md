@@ -4,13 +4,13 @@
 
 ### Changed
 
-- **דו-קיום עם RTL.** הוזרק מנגנון reinject נוסף שמופעל כשחלון VS Code חוזר לפוקוס (`onDidChangeWindowState`, עם throttle של 30ש'). תוסף ה-RTL עלול למחוק את הבלוק של Nonstop מ-`webview/index.js` בעת שחזור; עד כה ההתאוששות הסתמכה רק על בדיקה תקופתית כל 6 שעות, מה שהשאיר "זמן מת" ארוך. כעת הזמן המת מצטמצם משעות לשניות.
+- **חוסן הזרקה.** נוסף מנגנון reinject שמופעל כשחלון VS Code חוזר לפוקוס (`onDidChangeWindowState`, עם throttle של 30ש'). אם משהו משנה את קובץ ה-webview המשותף של Claude וההזרקה של Nonstop מוסרת, ההתאוששות עד כה הסתמכה רק על בדיקה תקופתית כל 6 שעות. כעת ה"זמן המת" מצטמצם משעות לשניות.
 
 ## [0.1.0] - 2026-06-03
 
 מימוש ראשוני (Phase 0 + שלד Phase 1):
 
-- ליבת הזרקה ב-host: `injector` עם idempotency מבוסס-מיקום (זוג markers דו-צדדי), `atomicWrite` (כתיבה אטומית + verify-after-write), `targets/claude-code` (זיהוי גרסה פעילה), `coexistence` (זיהוי RTL ואי-דריסה).
+- ליבת הזרקה ב-host: `injector` עם idempotency מבוסס-מיקום (זוג markers דו-צדדי), `atomicWrite` (כתיבה אטומית + verify-after-write), `targets/claude-code` (זיהוי גרסה פעילה), `coexistence` (זיהוי הזרקה של תוסף אחר ואי-דריסה).
 - `extension.js`: מחזור הזרקה, reinject תקופתי, פקודות VS Code, status bar.
 - סקריפט מוזרק `webview/nonstop.js`: כפתור ON/OFF (♾️), זיהוי מצב שכבתי (postMessage→DOM→heuristic), מנוע פינג, זיהוי done (sentinel + stall), טיפול בשאלות (`onQuestion`), המתנה מול rate-limit (DOM), backstops (maxRuntime/maxPings/quiet hours/user-activity), כלל בעלות לריבוי-פאנלים, ומצב debug.
 - מודול `ratelimit/structured` (usage-core מצורף) — מוכן, ממתין לערוץ host↔webview.

@@ -3,11 +3,11 @@
 /**
  * Position-based, two-sided-marker injection logic.
  *
- * Unlike RTL (which slices from its marker to end-of-file), Nonstop wraps its
- * injected block in matching open/close markers and only ever removes the text
- * *between and including* a marker pair. This lets two extensions coexist in the
- * same file, and lets us clean up "fossilized" leftovers that another extension's
- * restore might leave behind.
+ * Unlike a slice-from-marker-to-end-of-file approach, Nonstop wraps its injected
+ * block in matching open/close markers and only ever removes the text *between and
+ * including* a marker pair. This lets two extensions coexist in the same file, and
+ * lets us clean up "fossilized" leftovers that another extension's restore might
+ * leave behind.
  *
  * Pure string functions here (no fs) so they are trivially unit-testable.
  */
@@ -104,7 +104,7 @@ function hasValidInjection(content, version) {
 /**
  * Produce the new file content with a single fresh Nonstop block appended.
  * Strips any/all existing Nonstop blocks first (idempotent + de-dupe), and
- * leaves all non-Nonstop content (e.g. RTL injection) untouched.
+ * leaves all non-Nonstop content (e.g. another extension's injection) untouched.
  */
 function inject(content, version, configJson, scriptBody) {
   const clean = stripAllBlocks(content);
