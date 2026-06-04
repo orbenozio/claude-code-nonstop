@@ -620,10 +620,14 @@
     // position using the popup's real measured size (it grows with labels/hints, and
     // usually opens near the bottom edge next to the footer button).
     pop.style.maxWidth = (window.innerWidth - 16) + 'px';
+    pop.style.maxHeight = (window.innerHeight - 24) + 'px';
+    pop.style.overflowY = 'auto';
     document.body.appendChild(pop);
     var rect = pop.getBoundingClientRect();
-    var left = Math.min(e.clientX, window.innerWidth - rect.width - 8);
-    var top = Math.min(e.clientY, window.innerHeight - rect.height - 8);
+    var left = Math.min(e.clientX, window.innerWidth - rect.width - 12);
+    // Bottom margin is generous: the popup opens from the footer button, so leave
+    // room above the footer/input so its last row isn't clipped.
+    var top = Math.min(e.clientY, window.innerHeight - rect.height - 24);
     pop.style.left = Math.max(8, left) + 'px';
     pop.style.top = Math.max(8, top) + 'px';
 
