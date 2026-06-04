@@ -232,5 +232,39 @@ test('webview embeds the canonical primary rate-limit regex', () => {
     'webview/nonstop.js must keep the primary regex in sync with src/ratelimit/resetTime.js');
 });
 
+console.log('\nwebview popup handling (structure guard)');
+const NS = fs.readFileSync(path.join(__dirname, '..', 'webview', 'nonstop.js'), 'utf8');
+test('keeps the live-verified popup root selector (shared by permission + decision)', () => {
+  assert.ok(NS.indexOf('permissionRequestContainer_') !== -1,
+    'popupRoot must target the verified permissionRequestContainer_ class');
+});
+test('disambiguates a decision popup by its role="radio" options', () => {
+  assert.ok(NS.indexOf('decisionHints') !== -1 && NS.indexOf('[role="radio"]') !== -1,
+    'decision popups are identified by role="radio" inside the popup root');
+});
+test('detectPopup classifies PERMISSION vs DECISION', () => {
+  assert.ok(/function detectPopup\b/.test(NS), 'detectPopup() must exist');
+  assert.ok(NS.indexOf("'DECISION'") !== -1 && NS.indexOf("'PERMISSION'") !== -1,
+    'detectPopup returns DECISION / PERMISSION');
+});
+test('detectState emits the two new popup states', () => {
+  assert.ok(NS.indexOf("'WAITING_PERMISSION'") !== -1, 'WAITING_PERMISSION state present');
+  assert.ok(NS.indexOf("'WAITING_DECISION'") !== -1, 'WAITING_DECISION state present');
+});
+test('permission handling has a grace window and approve/defer/stop modes', () => {
+  assert.ok(NS.indexOf('permissionGraceMs') !== -1, 'grace window config present');
+  assert.ok(/onPermission/.test(NS), 'onPermission config present');
+  assert.ok(NS.indexOf('approvePermission') !== -1, 'auto-approve path present');
+});
+test('config defaults are conservative (defer permissions, stop on decisions)', () => {
+  // The seed DEFAULTS object should not auto-act without opt-in.
+  assert.ok(/onPermission:\s*'defer'/.test(NS), "onPermission defaults to 'defer'");
+  assert.ok(/onDecision:\s*'stop'/.test(NS), "onDecision defaults to 'stop'");
+});
+test('waiting_input with no popup still nudges (not a false question-stop)', () => {
+  assert.ok(/waiting_input[\s\S]{0,120}WAITING_CONTINUE/.test(NS),
+    'a postMessage waiting_input without a popup must map to WAITING_CONTINUE');
+});
+
 console.log('\n' + (failed === 0 ? 'ALL PASS' : 'FAILURES') + `: ${passed} passed, ${failed} failed\n`);
 process.exit(failed === 0 ? 0 : 1);

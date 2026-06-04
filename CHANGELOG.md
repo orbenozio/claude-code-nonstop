@@ -1,5 +1,18 @@
 # Changelog
 
+## \[0.2.0] - 2026-06-04
+
+### Added
+
+* **Permission prompts are now handled separately from decision prompts.** Claude's two interaction popups share the same outer container, so they're disambiguated by content: a decision popup ("choose an option") renders `role="radio"` options; a permission popup ("Allow this bash command?") does not. New `detectPopup()` classifies them and `detectState()` emits `WAITING_PERMISSION` / `WAITING_DECISION`.
+* **`onPermission` setting (`defer` / `approve` / `stop`, default `defer`).** `defer` leaves permission popups to another approver (e.g. the RTL extension's YOLO) or to you; `approve` auto-clicks the safe "Yes" (allow once); `stop` halts and hands it back.
+* **`permissionGraceMs` setting (default 10s).** Before acting on a permission popup, wait this long so any other approver can clear it first — if it disappears within the window we never interfere. **Set this higher than your YOLO auto-approve delay** so YOLO always wins the race. Exposed in the right-click settings popup.
+* **`onDecision` setting (`stop` / `best-judgment`, default `stop`).** `stop` leaves the choice to you (recommended); `best-judgment` picks the last "Other" option and answers with `decisionAnswer` ("use your best judgment"), falling back to `stop` if it can't drive the popup.
+
+### Fixed
+
+* A `waiting_input` postMessage with no popup on screen now correctly maps to `WAITING_CONTINUE` (a nudge) instead of being mistaken for a question — the previous `questionHints` selectors (`[role="radiogroup"]`, `approval_`, `permission_`) never matched the real DOM, so real permission/decision popups could slip through and get a blind "continue".
+
 ## \[0.1.4] - 2026-06-04
 
 ### Fixed
