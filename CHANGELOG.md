@@ -1,5 +1,11 @@
 # Changelog
 
+## \[0.2.2] - 2026-06-05
+
+### Fixed
+
+* **A shift no longer puts itself to sleep on conversation text that merely *mentions* a limit.** Rate-limit detection scanned the whole panel transcript, so a bare `resets 10:10pm` or `limit will reset` appearing in ordinary chat — for example while the conversation was discussing this very feature — was read as a real usage-limit notice. The shift then went into a silent multi-hour sleep with the toggle still lit and no popup on screen (the likely cause of "it was on overnight but stopped making progress and never went grey"). Detection now requires the canonical `hit/reached your <session|usage|rate> limit` notice structure; the loose reset-time patterns moved to a separate set used only to extract the reset time **after** a real limit is already confirmed. The stall-time `looksRateLimited` safety net was likewise narrowed to limit-anchored phrases so a stray `resets <time>` / `429` in chat can't block a finished shift from stopping. Added a regression test.
+
 ## \[0.2.1] - 2026-06-04
 
 ### Added

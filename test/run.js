@@ -11,7 +11,7 @@ const injector = require('../src/injector');
 const { detectOtherInjection } = require('../src/coexistence');
 const { writeAtomic, writeAndVerify } = require('../src/atomicWrite');
 const { parseUsage } = require('../src/ratelimit/structured');
-const { detectRateLimit, parseResetTime } = require('../src/ratelimit/resetTime');
+const { detectRateLimit, parseResetTime, RATE_LIMIT_REGEXES, RESET_TIME_REGEXES } = require('../src/ratelimit/resetTime');
 const { versionFromDirName } = require('../src/targets/claude-code');
 
 let passed = 0;
@@ -236,6 +236,26 @@ test('webview embeds the canonical primary rate-limit regex', () => {
   const src = fs.readFileSync(path.join(__dirname, '..', 'webview', 'nonstop.js'), 'utf8');
   assert.ok(src.indexOf('hit your (?:session|usage|rate) limit') !== -1,
     'webview/nonstop.js must keep the primary regex in sync with src/ratelimit/resetTime.js');
+});
+test('webview keeps the trigger/extractor split (loose reset-time patterns are NOT triggers)', () => {
+  const src = fs.readFileSync(path.join(__dirname, '..', 'webview', 'nonstop.js'), 'utf8');
+  assert.ok(src.indexOf('resetTimeRegexes') !== -1,
+    'webview must keep resetTimeRegexes separate so a bare "resets <time>" never flags a limit');
+});
+test('NO canonical trigger regex flags a bare reset-time mention (structural guard)', () => {
+  // The bug class: a loose "resets <time>" / "limit will reset" pattern living in the
+  // TRIGGER set, so chat that only mentions a reset time silently sleeps the shift. Assert
+  // none of the trigger regexes match such text — even if a future edit reorders the sets.
+  const bareMentions = ['resets 10:10pm', 'it resets at 9:40pm tonight', 'the limit will reset at 3:30pm'];
+  for (const re of RATE_LIMIT_REGEXES) {
+    for (const t of bareMentions) {
+      assert.ok(!re.test(t), `trigger regex ${re} must not match bare mention: "${t}"`);
+    }
+  }
+});
+test('the loose extractors DO capture a reset time (so enterSleep still gets one)', () => {
+  assert.ok(RESET_TIME_REGEXES.some((re) => re.test('resets 10:10pm')),
+    'RESET_TIME_REGEXES must still pull a time once a real limit is confirmed');
 });
 
 console.log('\nwebview popup handling (structure guard)');
