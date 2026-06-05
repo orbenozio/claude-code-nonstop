@@ -11,14 +11,25 @@
  * Real notice seen live: "You've hit your session limit · resets 10:10pm (Asia/Jerusalem)".
  */
 
-// Time-capturing patterns first — their group (m[1]) feeds parseResetTime; the bare
-// detector last just flags a limit so the caller sleeps on a fallback window.
+// Canonical usage-limit NOTICES — the ONLY patterns allowed to flag a limit (and so
+// put a shift to sleep). They must NOT match ordinary conversation that merely
+// *mentions* a limit or a reset time, so each requires the full "hit/reached your
+// <session|usage|rate> limit" structure. A bare "resets 10:10pm" in chat (e.g. while
+// debugging this feature) used to false-trigger a silent multi-hour sleep. The first
+// also captures the reset time (m[1]); the others flag a limit and leave the caller to
+// extract the time via RESET_TIME_REGEXES.
 const RATE_LIMIT_REGEXES = [
   /hit your (?:session|usage|rate) limit[\s\S]{0,80}?resets?\s+(\d{1,2}:\d{2}\s*[ap]m\b(?:\s*\([^)]+\))?)/i,
-  /\bresets?\s+(?:at\s+)?(\d{1,2}:\d{2}\s*[ap]m\b(?:\s*\([^)]+\))?)/i,
-  /limit will reset at\s+([^\n]+)/i,
   /\b\d+\s*-?\s*hour limit reached/i,
   /(?:hit|reached)[^\n]{0,30}\b(?:session|usage|rate) limit/i,
+];
+
+// Loose time extractors — used ONLY to pull a reset time AFTER a notice above has
+// already confirmed a real limit. Never flag a limit on their own, so a stray
+// "resets <time>" in chat is harmless here.
+const RESET_TIME_REGEXES = [
+  /\bresets?\s+(?:at\s+)?(\d{1,2}:\d{2}\s*[ap]m\b(?:\s*\([^)]+\))?)/i,
+  /limit will reset at\s+(\d{1,2}:\d{2}\s*[ap]m\b(?:\s*\([^)]+\))?)/i,
 ];
 
 /** Scan text for a rate-limit notice. Returns { matched, captured } or null. */
@@ -27,7 +38,18 @@ function detectRateLimit(text) {
   const tail = String(text).slice(-4000);
   for (let i = 0; i < RATE_LIMIT_REGEXES.length; i++) {
     const m = tail.match(RATE_LIMIT_REGEXES[i]);
-    if (m) return { matched: true, captured: m[1] || null };
+    if (m) {
+      let captured = m[1] || null;
+      // Notice without an inline time (e.g. "hit your usage limit") — try the loose
+      // extractors so the caller still gets a reset time when one is nearby.
+      if (!captured) {
+        for (let j = 0; j < RESET_TIME_REGEXES.length; j++) {
+          const t = tail.match(RESET_TIME_REGEXES[j]);
+          if (t) { captured = t[1]; break; }
+        }
+      }
+      return { matched: true, captured };
+    }
   }
   return null;
 }
@@ -90,4 +112,4 @@ function parseResetTime(str, now) {
   return tz ? nextTimeInZone(h, min, tz, now) : nextLocalTime(h, min, now);
 }
 
-module.exports = { RATE_LIMIT_REGEXES, detectRateLimit, parseResetTime, isValidTimeZone };
+module.exports = { RATE_LIMIT_REGEXES, RESET_TIME_REGEXES, detectRateLimit, parseResetTime, isValidTimeZone };

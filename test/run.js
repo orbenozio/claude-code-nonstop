@@ -175,6 +175,12 @@ test('detects a bare limit mention (no time) → captured null', () => {
 test('normal conversation text is not a rate limit', () => {
   assert.strictEqual(detectRateLimit('Here is the function you asked for.'), null);
 });
+test('a bare "resets <time>" mention in chat does NOT flag a limit (false-positive guard)', () => {
+  // Regression: discussing the feature ("...something like \"resets 10:10pm\"...") used to
+  // self-trigger a silent multi-hour sleep. Only a canonical NOTICE may flag a limit.
+  assert.strictEqual(detectRateLimit('if chat says something like "resets 10:10pm" it should be fine'), null);
+  assert.strictEqual(detectRateLimit('the limit will reset at 9:40pm in my notes'), null);
+});
 
 console.log('\nratelimit.resetTime — parse (timezone-aware)');
 test('resolves time in the reported IANA zone (independent of host TZ)', () => {

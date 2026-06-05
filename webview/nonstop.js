@@ -132,14 +132,25 @@
     // once), not "Yes, for all projects". Used to auto-approve when onPermission=approve.
     popupButtons: '[class*="buttonContainer_"] button',
     // Real format (captured live): "You've hit your session limit · resets 10:10pm (Asia/Jerusalem)".
-    // Time-capturing patterns first — their group (m[1]) feeds parseResetTime; the bare
-    // detector last just flags a limit so we sleep on the fallback window.
+    // ⚠ These are the ONLY patterns allowed to put a shift to sleep, so they must NOT
+    // match ordinary conversation that merely *mentions* a limit or a reset time (a
+    // bare "resets 10:10pm" in chat — e.g. while debugging this very feature — used to
+    // false-trigger a silent multi-hour sleep). Each one therefore requires the canonical
+    // "hit/reached your <session|usage|rate> limit" NOTICE structure. The first also
+    // captures the reset time (m[1]) for parseResetTime; the others flag a limit and let
+    // enterSleep() extract the time via resetTimeRegexes below.
     rateLimitRegexes: [
       /hit your (?:session|usage|rate) limit[\s\S]{0,80}?resets?\s+(\d{1,2}:\d{2}\s*[ap]m\b(?:\s*\([^)]+\))?)/i,
-      /\bresets?\s+(?:at\s+)?(\d{1,2}:\d{2}\s*[ap]m\b(?:\s*\([^)]+\))?)/i,
-      /limit will reset at\s+([^\n]+)/i,
       /\b\d+\s*-?\s*hour limit reached/i,
       /(?:hit|reached)[^\n]{0,30}\b(?:session|usage|rate) limit/i,
+    ],
+    // Loose time extractors — used ONLY to pull a reset time AFTER a notice above has
+    // already confirmed a real limit. Never trigger sleep on their own (that's the bug
+    // that the strict rateLimitRegexes set fixes), so a stray "resets <time>" in chat
+    // is harmless here.
+    resetTimeRegexes: [
+      /\bresets?\s+(?:at\s+)?(\d{1,2}:\d{2}\s*[ap]m\b(?:\s*\([^)]+\))?)/i,
+      /limit will reset at\s+(\d{1,2}:\d{2}\s*[ap]m\b(?:\s*\([^)]+\))?)/i,
     ],
   };
 
@@ -245,12 +256,18 @@
     log('⚠️ RATE-LIMIT CANDIDATE captured (read __nonstopDebug.rateLimitCapture()):', snippet);
   }
 
-  // Wide net — true if the panel tail looks like ANY usage/rate-limit notice, even
-  // when the precise detectRateLimit() regex didn't match. Used as a safety guard so
-  // a real limit is never mistaken for "task done" and the shift killed.
+  // Safety net — true if the panel tail looks like a usage/rate-limit notice, even when
+  // the precise detectRateLimit() regex didn't match. Used so a real limit is never
+  // mistaken for "task done" and the shift killed. Deliberately WIDER than detectRateLimit
+  // (which gates proactive sleeping) but NARROWER than RL_CAPTURE_RE: every alternative is
+  // anchored on the word "limit" (or an unambiguous limit phrase), so a stray "resets
+  // 10:10pm" or "429" in ordinary chat no longer trips it. (A transcript that literally
+  // discusses "session limit" can still match — the only airtight fix is anchoring on the
+  // notice DOM element, which needs a verified selector; tracked as future work.)
+  var LOOKS_LIMITED_RE = /(?:session|usage|rate|hour)[\s-]*limit|limit\s*(?:reached|will\s*reset|reset)|too many requests|approaching your usage/i;
   function looksRateLimited() {
     var text = panelText();
-    return !!text && RL_CAPTURE_RE.test(text.slice(-4000));
+    return !!text && LOOKS_LIMITED_RE.test(text.slice(-4000));
   }
 
   // Classify a visible interaction popup. Permission and decision popups share the
@@ -632,11 +649,14 @@
       if (parsed) until = parsed;
     }
     if (!until) {
-      // Precise detect missed the time — still try to pull a "resets <time>" out of
-      // the tail before falling back to the fixed wait window.
+      // Precise detect confirmed a limit but didn't capture the time — pull a reset time
+      // out of the tail via the loose extractors before falling back to the fixed window.
+      // Safe here because we only reach enterSleep once a real limit was already detected.
       var tail = (panelText() || '').slice(-4000);
-      var m = tail.match(/\bresets?\s+(?:at\s+)?(\d{1,2}:\d{2}\s*[ap]m\b(?:\s*\([^)]+\))?)/i);
-      if (m) { var p2 = parseResetTime(m[1]); if (p2) until = p2; }
+      for (var i = 0; i < SIGNALS.resetTimeRegexes.length; i++) {
+        var m = tail.match(SIGNALS.resetTimeRegexes[i]);
+        if (m) { var p2 = parseResetTime(m[1]); if (p2) { until = p2; break; } }
+      }
     }
     if (!until) until = Date.now() + CFG.rateLimitFallbackMs;
     // Accumulate slept time so maxRuntime ignores it.
