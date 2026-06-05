@@ -170,10 +170,29 @@
 
   function $(sel, root) { try { return (root || document).querySelector(sel); } catch (e) { return null; } }
 
+  // Our own injected DOM must NEVER count as a Claude state signal. (Our ♾️ button's
+  // aria-label "Nonstop" contains the substring "stop", so [aria-label*="Stop" i] in
+  // workingHints matched it and pegged detectState to WORKING forever → no ping ever
+  // fired while the shift was on. Same class of self-reference bug as the rate-limit
+  // text scan.) Skip anything inside our injected wrappers.
+  function isOurNode(el) {
+    return !!(el && el.closest && el.closest('#nonstop-nav, #nonstop-settings'));
+  }
+  function isVisible(el) {
+    return !!(el && (el.offsetWidth || el.offsetHeight || (el.getClientRects && el.getClientRects().length)));
+  }
+
+  // First element matching any selector that is NOT ours and is actually visible. A real
+  // working indicator (stop/interrupt button, spinner) is on-screen; a hidden or
+  // self-injected match is not a signal. isStreaming() is the primary WORKING signal, so
+  // being strict here is safe — genuine generation is still caught by output growth.
   function matchAny(selectors) {
     for (var i = 0; i < selectors.length; i++) {
-      var el = $(selectors[i]);
-      if (el) return el;
+      var els;
+      try { els = document.querySelectorAll(selectors[i]); } catch (e) { continue; }
+      for (var j = 0; j < els.length; j++) {
+        if (!isOurNode(els[j]) && isVisible(els[j])) return els[j];
+      }
     }
     return null;
   }

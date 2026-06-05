@@ -277,6 +277,14 @@ test('detectState emits the two new popup states', () => {
   assert.ok(NS.indexOf("'WAITING_PERMISSION'") !== -1, 'WAITING_PERMISSION state present');
   assert.ok(NS.indexOf("'WAITING_DECISION'") !== -1, 'WAITING_DECISION state present');
 });
+test('working-signal matching excludes our own injected DOM (self-match guard)', () => {
+  // Our ♾️ button's aria-label "Nonstop" contains "stop", so [aria-label*="Stop" i] used
+  // to match it and peg detectState to WORKING forever (no ping ever fired). matchAny must
+  // skip our injected wrappers so the button can never be read as a Claude state signal.
+  assert.ok(/function isOurNode\b/.test(NS), 'isOurNode() helper must exist');
+  assert.ok(NS.indexOf('#nonstop-nav') !== -1 && /closest\(['"]#nonstop-nav/.test(NS),
+    'matchAny must exclude elements inside #nonstop-nav / #nonstop-settings');
+});
 test('permission handling has a grace window and approve/defer/stop modes', () => {
   assert.ok(NS.indexOf('permissionGraceMs') !== -1, 'grace window config present');
   assert.ok(/onPermission/.test(NS), 'onPermission config present');
