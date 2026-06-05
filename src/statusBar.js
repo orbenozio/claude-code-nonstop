@@ -38,7 +38,8 @@ function reflect(r) {
   } else if (r.changed > 0) {
     setText('$(warning) ' + label + ' — reload', 'Claude Code Nonstop injected. Reload the window to load it. Click for menu.');
   } else {
-    setText('$(check) ' + label, 'Claude Code Nonstop is active (injected & current). Click for menu.');
+    // Active/current state: just the name + version, no icon (the $(check) was noisy).
+    setText(label, 'Claude Code Nonstop is active (injected & current). Click for menu.');
   }
 }
 

@@ -10,7 +10,7 @@ A VS Code extension that keeps Claude Code going — even after you hit a usage 
 
 *Right-click the ♾️ button for quick settings — interval, message, quiet hours, and stop limits.*
 
-> **Status: in development (0.1.2).** The host core and the injected script are covered by unit tests and verified live in the panel — including a real overnight run that waited out a usage limit and resumed the task automatically. Rate-limit reset times are parsed in their reported timezone, with a safe fixed-wait fallback.
+> **Status: 0.2.2.** The host core and the injected script are covered by unit tests and verified live in the panel — including permission/decision popup handling and a behaviorally verified wait→resume→ping cycle, plus a real overnight run that waited out a usage limit and resumed the task automatically. Rate-limit reset times are parsed in their reported timezone, with a safe fixed-wait fallback.
 
 ## How it works
 
