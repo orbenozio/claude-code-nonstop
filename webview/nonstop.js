@@ -79,6 +79,8 @@
     sleptAccum: 'nonstop-slept-accum-ms',
     rlCapture: 'nonstop-rl-capture', // Phase 3: stashed real rate-limit notice
     lastStop: 'nonstop-last-stop',   // why/when the last shift ended (diagnostics)
+    pendingRlSig: 'nonstop-pending-rl-sig', // signature of the limit we're currently sleeping out
+    servedRl: 'nonstop-served-rl',   // signature of a limit we've ALREADY waited out (don't re-sleep it)
   };
   function lsGet(k, d) { try { var v = localStorage.getItem(k); return v === null ? d : v; } catch (e) { return d; } }
   function lsSet(k, v) { try { localStorage.setItem(k, String(v)); } catch (e) {} }
@@ -289,6 +291,26 @@
     return !!text && LOOKS_LIMITED_RE.test(text.slice(-4000));
   }
 
+  // A stable id for the limit notice CURRENTLY on screen. The limit message stays in
+  // the transcript after its reset time passes, so without this we'd re-detect the same
+  // notice on wake, re-parse its now-past reset time to the NEXT day, and silently sleep
+  // ~24h instead of resuming. We remember the signature we slept out (LS.servedRl) and
+  // suppress re-sleeping while the same notice is still showing.
+  // Prefer the reset time (changes per limit window); fall back to a snippet of the notice
+  // so a fixed-window notice (no time) isn't re-slept forever either.
+  function rateLimitSignature() {
+    var rl = detectRateLimit();
+    if (rl && rl.captured) return 't:' + rl.captured;
+    var tail = (panelText() || '').slice(-4000);
+    for (var i = 0; i < SIGNALS.resetTimeRegexes.length; i++) {
+      var m = tail.match(SIGNALS.resetTimeRegexes[i]);
+      if (m) return 't:' + m[1];
+    }
+    var idx = tail.search(LOOKS_LIMITED_RE);
+    if (idx >= 0) return 's:' + tail.slice(idx, idx + 80).replace(/\s+/g, ' ').trim();
+    return '';
+  }
+
   // Classify a visible interaction popup. Permission and decision popups share the
   // same outer container (SIGNALS.popupRoot); a decision popup is the one that also
   // contains the choose-an-option structure (role="radio" / optionsContainer_).
@@ -304,9 +326,11 @@
 
   // Returns one of WORKING / WAITING_PERMISSION / WAITING_DECISION / WAITING_QUESTION
   // / WAITING_CONTINUE / RATE_LIMITED / DONE / UNKNOWN
-  function detectState() {
-    // Layer 0: rate limit takes precedence (so we never ping into a wall).
-    if (detectRateLimit()) return 'RATE_LIMITED';
+  function detectState(ignoreRateLimit) {
+    // Layer 0: rate limit takes precedence (so we never ping into a wall). Skipped when
+    // we've already slept out THIS notice (ignoreRateLimit) — otherwise the persistent
+    // on-screen notice would re-sleep us instead of letting the resume ping through.
+    if (!ignoreRateLimit && detectRateLimit()) return 'RATE_LIMITED';
 
     // Layer 0.5: output is actively growing → Claude is generating. Primary,
     // selector-independent WORKING signal.
@@ -481,6 +505,8 @@
     lsSet(LS.pingCount, 0);
     lsSet(LS.sleptAccum, 0);
     lsSet(LS.sleepUntil, '');
+    lsSet(LS.pendingRlSig, '');
+    lsSet(LS.servedRl, '');
     // Reset in-memory ping/stall state for a fresh shift.
     stallCount = 0; lastPingSig = null; lastPingAt = 0; lastSendAt = 0; lastGrowthAt = 0;
     baseSentinel = sentinelCount(); sentinelPings = 0;
@@ -580,9 +606,25 @@
     if (sleepUntil && Date.now() >= sleepUntil) {
       // Wake: account the slept time so it doesn't burn maxRuntime.
       lsSet(LS.sleepUntil, '');
+      // Mark the limit we just waited out. Its notice is still on screen, so without this
+      // the next detectState() would re-sleep us to the SAME (now-past → tomorrow) reset
+      // time and the shift would never resume. Make a resume ping eligible immediately.
+      var served = lsGet(LS.pendingRlSig, '');
+      if (served) lsSet(LS.servedRl, served);
+      lsSet(LS.pendingRlSig, '');
+      lastPingAt = 0;
     }
 
-    var state = detectState();
+    // Have we already waited out the limit notice that's still showing? If so, ignore it
+    // for state detection (resume) instead of treating it as a fresh wall to sleep behind.
+    var rlSig = rateLimitSignature();
+    var servedSig = lsGet(LS.servedRl, '');
+    var alreadyServed = !!rlSig && rlSig === servedSig;
+    // Self-clean: once the served notice has scrolled out of the tail, forget it so a
+    // genuinely new limit with the same reset-time string is still honored.
+    if (servedSig && !rlSig) { lsSet(LS.servedRl, ''); }
+
+    var state = detectState(alreadyServed);
     log('state:', state);
 
     // Reset the popup grace clocks whenever the matching popup isn't on screen, so a
@@ -624,8 +666,10 @@
         if (stallCount >= CFG.doneStallPings) {
           // Output stopped growing. Before declaring "done", make sure this isn't a
           // rate limit that the precise detector missed — otherwise we'd kill the
-          // shift mid-limit and never resume after the reset.
-          if (looksRateLimited()) {
+          // shift mid-limit and never resume after the reset. But NOT if this is the
+          // notice we already slept out (alreadyServed): re-sleeping it is the ~24h
+          // silent-sleep bug. There, a real stall just means resume didn't take → stop.
+          if (looksRateLimited() && !alreadyServed) {
             log('stall looks like a rate limit — sleeping instead of stopping');
             stallCount = 0;
             enterSleep();
@@ -682,6 +726,8 @@
     var slept = lsNum(LS.sleptAccum, 0) + Math.max(0, until - Date.now());
     lsSet(LS.sleptAccum, slept);
     lsSet(LS.sleepUntil, until);
+    // Remember which notice we're sleeping out, so on wake we don't re-sleep the same one.
+    lsSet(LS.pendingRlSig, rateLimitSignature());
     log('rate limited — sleeping until', new Date(until).toISOString());
   }
 
@@ -1019,6 +1065,9 @@
         looksRateLimited: looksRateLimited(),
         pings: lsNum(LS.pingCount, 0),
         sleepingUntil: s ? new Date(s).toISOString() : null,
+        rlSignature: rateLimitSignature() || null,
+        servedRl: lsGet(LS.servedRl, '') || null,   // limit already waited out (won't re-sleep)
+        pendingRl: lsGet(LS.pendingRlSig, '') || null, // limit currently being slept out
         lastStop: lsGet(LS.lastStop, '(none)'),
       };
     },

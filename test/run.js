@@ -258,6 +258,29 @@ test('the loose extractors DO capture a reset time (so enterSleep still gets one
     'RESET_TIME_REGEXES must still pull a time once a real limit is confirmed');
 });
 
+console.log('\nwebview rate-limit resume (re-sleep bug guard)');
+{
+  const src = fs.readFileSync(path.join(__dirname, '..', 'webview', 'nonstop.js'), 'utf8');
+  test('remembers the limit it slept out (servedRl) so the persistent notice does not re-sleep', () => {
+    assert.ok(src.indexOf('servedRl') !== -1, 'must track a served-limit signature');
+    assert.ok(/function rateLimitSignature\b/.test(src), 'rateLimitSignature() must exist');
+  });
+  test('detectState can ignore the rate-limit layer for an already-served notice', () => {
+    assert.ok(/function detectState\(ignoreRateLimit\)/.test(src),
+      'detectState must accept ignoreRateLimit so a served limit resumes instead of re-sleeping');
+    assert.ok(/!ignoreRateLimit && detectRateLimit\(\)/.test(src),
+      'layer-0 rate-limit detection must be gated by ignoreRateLimit');
+  });
+  test('on wake the slept-out signature is promoted to servedRl', () => {
+    assert.ok(/pendingRlSig/.test(src), 'enterSleep must stash the signature it is sleeping out');
+    assert.ok(/LS\.servedRl, served\)/.test(src), 'wake must promote the pending signature to served');
+  });
+  test('the stall→sleep guard does not re-sleep an already-served notice', () => {
+    assert.ok(/looksRateLimited\(\) && !alreadyServed/.test(src),
+      'output-stall re-sleep must be suppressed for a limit we already waited out');
+  });
+}
+
 console.log('\nwebview popup handling (structure guard)');
 const NS = fs.readFileSync(path.join(__dirname, '..', 'webview', 'nonstop.js'), 'utf8');
 test('keeps the live-verified popup root selector (shared by permission + decision)', () => {

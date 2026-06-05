@@ -1,5 +1,11 @@
 # Changelog
 
+## \[0.2.3] - 2026-06-05
+
+### Fixed
+
+* **A shift now resumes after a usage limit instead of silently sleeping ~24h.** When Claude posts "You've hit your session limit · resets 10:10pm", Nonstop correctly sleeps until that time — but the notice stays in the transcript after the reset passes. On wake, `detectState()` re-detected the same on-screen notice, `parseResetTime` resolved its now-past time to the **next** day, and the shift went back to sleep until tomorrow — toggle still lit, never resuming (the cause of "it's on, the limit message is showing, but it won't continue"). Nonstop now records the signature of the limit it slept out (`servedRl`) and, while that same notice is still showing, ignores the rate-limit layer so the resume ping goes through; the stall→sleep safety net is likewise suppressed for an already-served notice. The signature self-clears once the notice scrolls out of view, so a genuinely new limit is still honored. Added structural guard tests.
+
 ## \[0.2.2] - 2026-06-05
 
 ### Fixed
