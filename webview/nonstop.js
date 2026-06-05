@@ -770,16 +770,18 @@
       var l = document.createElement('span'); l.textContent = label; l.style.whiteSpace = 'nowrap';
       r.appendChild(l); r.appendChild(inputEl); pop.appendChild(r);
     }
-    function mkInput(type, val, w) {
+    // All inputs and selects share one width (border-box) so their right edges line up.
+    var FIELD_W = 120;
+    var fieldCss = 'width:' + FIELD_W + 'px;box-sizing:border-box;background:var(--vscode-input-background,#3c3c3c);' +
+      'color:inherit;border:1px solid var(--vscode-input-border,#555);border-radius:3px;padding:2px 4px;';
+    function mkInput(type, val) {
       var i = document.createElement('input'); i.type = type; i.value = val;
-      i.style.cssText = 'width:' + (w || 70) + 'px;background:var(--vscode-input-background,#3c3c3c);' +
-        'color:inherit;border:1px solid var(--vscode-input-border,#555);border-radius:3px;padding:2px 4px;';
+      i.style.cssText = fieldCss;
       return i;
     }
     function mkSelect(opts, val) {
       var s = document.createElement('select');
-      s.style.cssText = 'background:var(--vscode-input-background,#3c3c3c);color:inherit;' +
-        'border:1px solid var(--vscode-input-border,#555);border-radius:3px;padding:2px 4px;';
+      s.style.cssText = fieldCss;
       opts.forEach(function (o) {
         var op = document.createElement('option');
         op.value = o; op.textContent = o; if (o === val) op.selected = true;
@@ -808,12 +810,12 @@
     interval.onchange = function () { setOverride('pingIntervalMs', Math.max(15, parseInt(interval.value, 10) || 60) * 1000); };
     row('Send a message every (sec)', interval);
 
-    var ptext = mkInput('text', liveCfg('pingText'), 130);
+    var ptext = mkInput('text', liveCfg('pingText'));
     ptext.title = 'The text sent to Claude to continue (e.g. "continue").';
     ptext.onchange = function () { setOverride('pingText', ptext.value); };
     row('Message to send', ptext);
 
-    var quiet = mkInput('text', liveCfg('quietHours') || '', 95);
+    var quiet = mkInput('text', liveCfg('quietHours') || '');
     quiet.placeholder = 'e.g. 09:00-17:00';
     quiet.title = 'Optional. A window when Nonstop pauses and sends nothing — e.g. your work hours. Leave empty to run anytime, including overnight.';
     quiet.onchange = function () { setOverride('quietHours', quiet.value); };
@@ -829,13 +831,22 @@
     var mrWrap = document.createElement('div');
     mrWrap.style.cssText = 'display:flex;align-items:center;gap:6px;';
     var mrHint = document.createElement('span');
-    mrHint.style.cssText = 'opacity:.6;white-space:nowrap;min-width:30px;text-align:right;';
-    function updMrHint() { var m = parseInt(mr.value, 10) || 0; mrHint.textContent = m > 0 ? '= ' + (Math.round(m / 6) / 10) + 'h' : ''; }
+    mrHint.style.cssText = 'opacity:.6;white-space:nowrap;';
+    // Hint sits to the LEFT of the input, so read it as "8h = [480]" (= goes after the hours).
+    function updMrHint() { var m = parseInt(mr.value, 10) || 0; mrHint.textContent = m > 0 ? (Math.round(m / 6) / 10) + 'h =' : ''; }
     updMrHint();
     mr.oninput = updMrHint;
     mr.onchange = function () { setOverride('maxRuntimeMs', Math.max(0, parseInt(mr.value, 10) || 0) * 60000); updMrHint(); };
-    mrWrap.appendChild(mr); mrWrap.appendChild(mrHint);
+    mrWrap.appendChild(mrHint); mrWrap.appendChild(mr); // "= 8h" sits to the LEFT of the input
     row('Stop after (minutes, 0=off)', mrWrap);
+
+    // Divider: everything below is about how Nonstop handles Claude's interaction popups
+    // (permission + decision), as opposed to the general ping/stop settings above.
+    var popupDivider = document.createElement('div');
+    popupDivider.style.cssText = 'border-top:1px solid var(--vscode-editorWidget-border,#454545);' +
+      'margin:9px 0 5px;padding-top:6px;font-size:10px;text-transform:uppercase;letter-spacing:.4px;opacity:.55;';
+    popupDivider.textContent = 'Popup handling';
+    pop.appendChild(popupDivider);
 
     var perm = mkSelect(['defer', 'approve', 'stop'], liveCfg('onPermission'));
     perm.title = 'When Claude asks permission to run a tool (e.g. a bash command):\n' +

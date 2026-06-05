@@ -35,8 +35,8 @@ function roundedRectSDF(px, py) {
 }
 
 // Pre-sample the lemniscate (figure-eight) curve once.
-const A = 46 * SS;                 // horizontal half-extent of the ∞
-const STROKE = 9 * SS;             // half stroke width
+const A = 44 * SS;                 // horizontal half-extent of the ∞
+const STROKE = 5 * SS;             // half stroke width (slim, refined)
 const N = 4000;
 const curve = new Float64Array(N * 2);
 for (let i = 0; i < N; i++) {
@@ -45,7 +45,7 @@ for (let i = 0; i < N; i++) {
   curve[i * 2] = c + (A * Math.cos(t)) / denom;
   curve[i * 2 + 1] = c + (A * Math.sin(t) * Math.cos(t)) / denom;
 }
-function infinityCoverage(px, py) {
+function infinityDist(px, py) {
   let best = Infinity;
   for (let i = 0; i < N; i++) {
     const dx = px - curve[i * 2];
@@ -53,9 +53,14 @@ function infinityCoverage(px, py) {
     const d2 = dx * dx + dy * dy;
     if (d2 < best) best = d2;
   }
-  const d = Math.sqrt(best);
-  return clamp(STROKE - d + 0.5 * SS, 0, 1); // 1 = on the stroke
+  return Math.sqrt(best);
 }
+
+// Soft drop shadow under the ∞, for a subtle sense of depth (and one more coral tone).
+const SHADOW_DY = 3 * SS;          // how far the shadow falls below the mark
+const SHADOW_BLUR = 7 * SS;        // soft falloff width
+const SHADOW_STR = 0.30;           // max darkening (0..1)
+const SHADOW_COL = [132, 50, 31];  // a deeper coral than the gradient bottom
 
 // Render the supersampled image as premultiplied RGBA.
 const hi = new Float64Array(R * R * 4);
@@ -66,8 +71,12 @@ for (let y = 0; y < R; y++) {
     const o = (y * R + x) * 4;
     if (bgA <= 0) continue;                 // transparent outside
     const g = clamp(y / R, 0, 1);
-    const bg = mix(TOP, BOT, g);
-    const inf = infinityCoverage(x, y) * bgA;
+    let bg = mix(TOP, BOT, g);
+    // Sample the curve just ABOVE this pixel so the shadow falls below the mark.
+    const ds = infinityDist(x, y - SHADOW_DY);
+    const shadow = (clamp(STROKE + SHADOW_BLUR - ds, 0, SHADOW_BLUR) / SHADOW_BLUR) * SHADOW_STR;
+    bg = mix(bg, SHADOW_COL, shadow);
+    const inf = clamp(STROKE - infinityDist(x, y) + 0.5 * SS, 0, 1) * bgA;
     const rgb = mix(bg, WHITE, inf);
     hi[o] = rgb[0] * bgA;                    // premultiplied
     hi[o + 1] = rgb[1] * bgA;
