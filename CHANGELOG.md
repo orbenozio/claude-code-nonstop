@@ -1,5 +1,11 @@
 # Changelog
 
+## \[0.2.4] - 2026-06-06
+
+### Changed
+
+* **The ♾️ button now docks into a shared `#orb-tools` toolbar instead of its own private wrapper.** Previously Nonstop inserted its own `#nonstop-nav` wrapper to the left of Claude's mode button. With more than one injected tool in the panel, each spawned its own footer chip. Nonstop now follows the shared-toolbar convention: it reuses `#orb-tools` if a sibling tool already created it, otherwise creates it once — so Nonstop and any other injected tools (e.g. a launcher) line up in one container. The self-match guard that keeps our own button from being read as "Claude is working" now scopes to `#orb-tools`, covering sibling buttons too. No behaviour change for users; the toggle, settings popup, and rate-limit handling are unchanged. Updated the drift-guard test and added one for the shared-toolbar convention.
+
 ## \[0.2.3] - 2026-06-05
 
 ### Fixed

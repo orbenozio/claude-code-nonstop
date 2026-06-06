@@ -177,8 +177,10 @@
   // workingHints matched it and pegged detectState to WORKING forever → no ping ever
   // fired while the shift was on. Same class of self-reference bug as the rate-limit
   // text scan.) Skip anything inside our injected wrappers.
+  // Anything inside the shared #orb-tools toolbar (our ♾️ button or a sibling tool's
+  // button) or our settings popup is injected UI — never a Claude state signal.
   function isOurNode(el) {
-    return !!(el && el.closest && el.closest('#nonstop-nav, #nonstop-settings'));
+    return !!(el && el.closest && el.closest('#orb-tools, #nonstop-settings'));
   }
   function isVisible(el) {
     return !!(el && (el.offsetWidth || el.offsetHeight || (el.getClientRects && el.getClientRects().length)));
@@ -953,13 +955,34 @@
     }, 0);
   }
 
+  // ── The shared toolbar div (#orb-tools convention) ───────────────────────────
+  // All of the user's injected buttons share ONE container, #orb-tools: reuse it if
+  // a sibling tool already created it, otherwise create it and dock it just to the
+  // LEFT of Claude's native mode button (fall back to the footer end). Re-query every
+  // call (never cache the node) — Claude re-renders the footer and detaches it.
+  function ensureToolbar() {
+    var existing = document.getElementById('orb-tools');
+    if (existing && existing.isConnected) return existing;
+    var footer = $(SIGNALS.footer);
+    if (!footer) return null;
+    var bar = existing || document.createElement('div');
+    bar.id = 'orb-tools';
+    bar.style.cssText = 'display:inline-flex;align-items:center;gap:2px;';
+    var modeBtn = footer.querySelector(SIGNALS.modeButton);
+    var modeContainer = modeBtn ? modeBtn.parentElement : null;
+    if (modeContainer && modeContainer.parentNode) {
+      modeContainer.parentNode.insertBefore(bar, modeContainer);
+    } else {
+      footer.appendChild(bar);
+    }
+    return bar;
+  }
+
   function ensureStyle() {
     if (document.getElementById('nonstop-style')) return;
     var st = document.createElement('style');
     st.id = 'nonstop-style';
     st.textContent =
-      // Own wrapper so we sit as a self-contained item next to the mode button.
-      '#nonstop-nav{display:inline-flex;align-items:center;}' +
       // The SVG infinity is coloured via currentColor — deterministic ON/OFF.
       // OFF: dim grey.
       '#nonstop-btn{background:transparent;border:none;cursor:pointer;' +
@@ -976,9 +999,16 @@
   }
 
   function injectButton() {
-    if (document.getElementById('nonstop-btn')) return;
-    var footer = $(SIGNALS.footer);
-    if (!footer) return;
+    if (document.getElementById('nonstop-btn')) {
+      // Button exists — but make sure it's still docked in the live shared toolbar
+      // (Claude may have re-rendered the footer and detached #orb-tools).
+      var bar0 = ensureToolbar();
+      var btn0 = document.getElementById('nonstop-btn');
+      if (bar0 && btn0 && btn0.parentNode !== bar0) bar0.appendChild(btn0);
+      return;
+    }
+    var bar = ensureToolbar();
+    if (!bar) return;
     ensureStyle();
 
     var btn = document.createElement('button');
@@ -994,21 +1024,11 @@
     btn.addEventListener('click', function (e) { e.preventDefault(); e.stopPropagation(); toggleShift(); });
     btn.addEventListener('contextmenu', function (e) { e.preventDefault(); e.stopPropagation(); showSettingsPopup(e); });
 
-    // Give the button its own wrapper and place it just to the LEFT of Claude's
-    // native mode button (the "Auto mode" / permission picker) — present for every
-    // user, no extension required. Fall back to the footer end.
-    var wrap = document.createElement('div');
-    wrap.id = 'nonstop-nav';
-    wrap.appendChild(btn);
-    var modeBtn = footer.querySelector(SIGNALS.modeButton);
-    var modeContainer = modeBtn ? modeBtn.parentElement : null;
-    if (modeContainer && modeContainer.parentNode) {
-      modeContainer.parentNode.insertBefore(wrap, modeContainer);
-    } else {
-      footer.appendChild(wrap);
-    }
+    // Dock into the shared #orb-tools toolbar (created/positioned by ensureToolbar),
+    // so we sit alongside the user's other injected tools instead of in our own wrapper.
+    bar.appendChild(btn);
     updateButton();
-    log('button injected', modeContainer ? 'left of mode button' : 'at footer end');
+    log('button injected into #orb-tools');
   }
   function updateButton() {
     var btn = document.getElementById('nonstop-btn');

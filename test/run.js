@@ -303,10 +303,19 @@ test('detectState emits the two new popup states', () => {
 test('working-signal matching excludes our own injected DOM (self-match guard)', () => {
   // Our ♾️ button's aria-label "Nonstop" contains "stop", so [aria-label*="Stop" i] used
   // to match it and peg detectState to WORKING forever (no ping ever fired). matchAny must
-  // skip our injected wrappers so the button can never be read as a Claude state signal.
+  // skip the shared #orb-tools toolbar so the button can never be read as a Claude state signal.
   assert.ok(/function isOurNode\b/.test(NS), 'isOurNode() helper must exist');
-  assert.ok(NS.indexOf('#nonstop-nav') !== -1 && /closest\(['"]#nonstop-nav/.test(NS),
-    'matchAny must exclude elements inside #nonstop-nav / #nonstop-settings');
+  assert.ok(NS.indexOf('#orb-tools') !== -1 && /closest\(['"]#orb-tools/.test(NS),
+    'matchAny must exclude elements inside the shared #orb-tools toolbar / #nonstop-settings');
+});
+test('button docks into the shared #orb-tools toolbar (reuse-if-present)', () => {
+  // Coexistence convention: every injected tool shares ONE #orb-tools container, reused
+  // if a sibling tool already created it. The button must dock into it, not into a
+  // private per-tool wrapper — otherwise sibling tools each spawn their own footer chip.
+  assert.ok(/function ensureToolbar\b/.test(NS), 'ensureToolbar() helper must exist');
+  assert.ok(/getElementById\(['"]orb-tools['"]\)/.test(NS), 'ensureToolbar reuses an existing #orb-tools');
+  assert.ok(/\bbar\.id\s*=\s*['"]orb-tools['"]/.test(NS), 'ensureToolbar tags the container #orb-tools');
+  assert.ok(NS.indexOf('#nonstop-nav') === -1, 'the private #nonstop-nav wrapper must be gone');
 });
 test('permission handling has a grace window and approve/defer/stop modes', () => {
   assert.ok(NS.indexOf('permissionGraceMs') !== -1, 'grace window config present');
