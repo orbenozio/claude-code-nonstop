@@ -79,6 +79,31 @@ test('fossilized duplicate Nonstop blocks are normalized to one', () => {
   assert.ok(injector.hasValidInjection(fixed, V));
 });
 
+test('re-injecting an unchanged block is a byte-for-byte no-op (no reload-prompt war)', () => {
+  // The bug: two injectors that both append-to-end fight over who is last, so each
+  // activation re-orders the file and reports changed>0 → endless reload prompts.
+  // In-place injection must make a re-inject of a current block a true no-op, and must
+  // never move a coexisting foreign block — whether it sits before or after ours.
+  const withForeignAfter = injector.inject('base', V, CFGJSON, SCRIPT) + OTHER_BLOCK;
+  assert.strictEqual(injector.inject(withForeignAfter, V, CFGJSON, SCRIPT), withForeignAfter,
+    'foreign block AFTER ours: re-inject must be identical (no churn, foreign not moved)');
+
+  const withForeignBefore = injector.inject('pre' + OTHER_BLOCK, V, CFGJSON, SCRIPT);
+  assert.strictEqual(injector.inject(withForeignBefore, V, CFGJSON, SCRIPT), withForeignBefore,
+    'foreign block BEFORE ours: re-inject must be identical (our block stays in place)');
+});
+
+test('a content/version change updates our block in place without moving a foreign block', () => {
+  const start = injector.inject('pre' + OTHER_BLOCK, V, CFGJSON, SCRIPT); // foreign BEFORE ours
+  assert.ok(start.indexOf('RTL for VS Code Agents') < start.indexOf('Claude Code Nonstop (injected)'),
+    'precondition: foreign sits before ours');
+  const updated = injector.inject(start, '9.9.9', CFGJSON, SCRIPT); // version bump → block changes
+  assert.notStrictEqual(updated, start, 'a real change must rewrite');
+  assert.ok(injector.hasValidInjection(updated, '9.9.9'), 'updated to the new version');
+  assert.ok(updated.indexOf('RTL for VS Code Agents') < updated.indexOf('Claude Code Nonstop (injected)'),
+    'foreign block stays BEFORE ours — not reordered to the end');
+});
+
 test('malformed block (open without close) is cleaned up', () => {
   const malformed = 'base\n// >>> Claude Code Nonstop (injected) v0.0.1 >>>\norphan();';
   const blocks = injector.findBlocks(malformed);

@@ -1,5 +1,11 @@
 # Changelog
 
+## \[0.2.5] - 2026-06-06
+
+### Fixed
+
+* **No more endless "Reload Window" prompts when another injector (e.g. Agentville) shares the panel.** Injection used to strip our block and re-append it at the *end* of Claude's `webview/index.js`. With two coexisting injectors both appending to the end, each activation re-ordered the file so the other was no longer last — so both saw the file "changed" on every window reload and both re-prompted a reload, forever. Injection is now **in-place**: an existing block is replaced where it sits (duplicates dropped, foreign blocks and surrounding whitespace untouched), so re-injecting a current block is a byte-for-byte no-op. A reload is only offered when our block's own content actually changed. Added regression tests for the no-op guarantee and for not reordering a foreign block.
+
 ## \[0.2.4] - 2026-06-06
 
 ### Changed

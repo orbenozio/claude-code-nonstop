@@ -102,15 +102,40 @@ function hasValidInjection(content, version) {
 }
 
 /**
- * Produce the new file content with a single fresh Nonstop block appended.
- * Strips any/all existing Nonstop blocks first (idempotent + de-dupe), and
- * leaves all non-Nonstop content (e.g. another extension's injection) untouched.
+ * Produce the new file content with a single, current Nonstop block.
+ *
+ * In-place by design: if a block already exists we replace it *where it sits* and
+ * drop any duplicates, leaving its position and all surrounding (foreign) content
+ * and whitespace untouched. Only when no block exists do we append one at the end.
+ *
+ * Why not "strip-all + append-to-end": two coexisting injectors that both append to
+ * the end fight over who is last — each run moves its own block past the other, so
+ * each sees the file "changed" every activation and re-prompts a reload forever.
+ * Replacing in place makes injection a true no-op when our block is already current
+ * (next === content), which is what stops that churn. See SPEC.md §4.2 / §7.
  */
 function inject(content, version, configJson, scriptBody) {
-  const clean = stripAllBlocks(content);
-  const trimmed = clean.replace(/\s+$/, '');
   const block = buildBlock(version, configJson, scriptBody);
-  return `${trimmed}\n\n${block}\n`;
+  const blocks = findBlocks(content);
+
+  if (blocks.length === 0) {
+    // Absent → append at the end with a blank-line separator.
+    const trimmed = content.replace(/\s+$/, '');
+    return `${trimmed}\n\n${block}\n`;
+  }
+
+  // Present (possibly duplicated). Remove the extra duplicate blocks first, last→first
+  // so earlier indices stay valid; this never shifts blocks[0] (the earliest one).
+  let out = content;
+  for (let i = blocks.length - 1; i >= 1; i--) {
+    let { start, end } = blocks[i];
+    if (out[end] === '\n') end += 1;            // eat one trailing newline
+    if (start > 0 && out[start - 1] === '\n') start -= 1; // and one preceding newline
+    out = out.slice(0, start) + out.slice(end);
+  }
+  // Replace the first/only block in place — its bounds are unaffected by the removals above.
+  const b0 = blocks[0];
+  return out.slice(0, b0.start) + block + out.slice(b0.end);
 }
 
 module.exports = {
