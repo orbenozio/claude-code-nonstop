@@ -282,6 +282,20 @@ test('the loose extractors DO capture a reset time (so enterSleep still gets one
   assert.ok(RESET_TIME_REGEXES.some((re) => re.test('resets 10:10pm')),
     'RESET_TIME_REGEXES must still pull a time once a real limit is confirmed');
 });
+test('detectors scan the transcript subtree (not document.body) and use textContent', () => {
+  // Two coupled invariants: (1) the scan is scoped to the messages container, so Claude's
+  // FOOTER usage meter ("usage limits" / "Resets <time>") can't false-trip looksRateLimited()
+  // into sleeping a finished shift; (2) it reads textContent, not innerText, so the 1Hz loop
+  // never forces a full-document reflow (the periodic-freeze bug). A revert to body/innerText
+  // re-arms one of those, so guard both here.
+  const src = fs.readFileSync(path.join(__dirname, '..', 'webview', 'nonstop.js'), 'utf8');
+  assert.ok(/function scanRoot\(\)\s*\{\s*return \$\(SIGNALS\.transcript\)/.test(src),
+    'panelText/panelLen must scan SIGNALS.transcript (messages container), not document.body');
+  assert.ok(/transcript:\s*'\[class\*="messagesContainer_"\]'/.test(src),
+    'SIGNALS.transcript must target Claude\'s messages container');
+  assert.ok(src.indexOf('.innerText') === -1,
+    'no .innerText anywhere in the webview — it forces a synchronous reflow on the shared UI thread');
+});
 
 console.log('\nwebview rate-limit resume (re-sleep bug guard)');
 {

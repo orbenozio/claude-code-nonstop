@@ -122,6 +122,16 @@
     // footerButtonPrimary_; confirmed against the live panel — it wraps a
     // <span> like "Auto mode"). We dock our ♾️ right after it.
     modeButton: '[class*="footerButtonPrimary_"]',
+    // Claude's real send/submit control: <button type="submit" class="sendButton_…">,
+    // no aria-label (verified against the live bundle). Doubles as Stop while busy.
+    sendButton: 'button[class*="sendButton_"]',
+    // The conversation transcript scroll region (Claude's messages container). We scan
+    // THIS, not document.body, so the detectors never see Claude's footer chrome — its
+    // usage meter renders the literal strings "usage limits" / "Resets <time>" which sit
+    // at the end of body (inside our -4000 tail) and would false-trip looksRateLimited().
+    // The real "hit your … limit · resets <time>" notice renders inside the transcript,
+    // so scoping here keeps detection intact while dropping the chrome. Cheaper too.
+    transcript: '[class*="messagesContainer_"]',
     // TUNE: indicators of an in-progress turn (stop/interrupt button, spinner).
     workingHints: ['[aria-label*="Stop" i]', '[aria-label*="Interrupt" i]', '[class*="streaming_"]', '[class*="loading_"]'],
     // Permission AND decision popups share this outer container (verified against the
@@ -204,15 +214,36 @@
   function getInput() { return $(SIGNALS.input); }
   function inputText() { var el = getInput(); return el ? (el.textContent || '').trim() : ''; }
 
+  // The DOM subtree the detectors scan. Prefer Claude's transcript container (excludes
+  // the footer chrome whose usage meter would false-trip the rate-limit detectors, and a
+  // smaller subtree is cheaper). Fall back to document.body if the selector ever breaks
+  // (graceful degradation — detection keeps working, just wider).
+  function scanRoot() { return $(SIGNALS.transcript) || document.body; }
+
+  // Bounded scan of the conversation area for rate-limit / sentinel detection.
+  // Uses textContent (NOT innerText): innerText forces a synchronous reflow of the
+  // whole growing transcript on every call, and tick() calls this 5–8× per second on
+  // the SAME main thread as Claude's UI — that reflow storm is what periodically froze
+  // the panel ("no response"), worsening as the conversation grew. textContent reads
+  // the same characters with zero layout. All consumers .slice(-4000) and regex-match,
+  // so the rendered-vs-raw difference is immaterial.
+  // Memoized for a short window so the many calls within one tick materialize the
+  // (still large) string only once instead of 5–8 times.
+  var _ptCache = '', _ptAt = 0;
   function panelText() {
-    // Bounded scan of the conversation area for rate-limit / sentinel detection.
-    var main = document.body;
-    return main ? (main.innerText || '') : '';
+    var now = Date.now();
+    if (now - _ptAt < 250 && _ptAt !== 0) return _ptCache;
+    var root = scanRoot();
+    _ptCache = (root && root.textContent) || '';
+    _ptAt = now;
+    return _ptCache;
   }
 
   // Cheap length probe (textContent triggers no layout) for streaming detection.
+  // Same scope as panelText so footer-meter ticks never read as Claude "streaming".
   function panelLen() {
-    return (document.body && document.body.textContent || '').length;
+    var root = scanRoot();
+    return (root && root.textContent || '').length;
   }
 
   // ── Streaming detection by output growth (selector-independent, robust) ───────
@@ -221,6 +252,8 @@
   var lastLen = -1;
   var lastGrowthAt = 0;
   function sampleGrowth() {
+    // No shift running → don't materialize the whole transcript every second.
+    if (!isEnabled()) { lastLen = -1; return; }
     var len = panelLen();
     if (lastLen >= 0 && len !== lastLen) lastGrowthAt = Date.now();
     lastLen = len;
@@ -450,13 +483,30 @@
 
   // ── Sending text into the contenteditable input ──────────────────────────────
   var weAreTyping = false;
+  var lastInsertedText = ''; // the exact text WE last typed into the box (a ping)
+
+  // Text in the input that we did NOT put there = a user draft. Our own previously
+  // injected ping that got stuck (e.g. a submit that didn't take) is NOT foreign, so
+  // we can still clear/resend it. This is the guard that stops us from selectAll+delete
+  // -ing a request the user is mid-typing — which used to wipe it unrecoverably (Claude
+  // keeps the draft only in memory, so a reload lost it: "my request wasn't captured").
+  function inputIsForeign() {
+    var t = inputText();
+    if (t === '') return false;
+    return t !== (lastInsertedText || '').trim();
+  }
+
   function setInputAndSend(text) {
     var input = getInput();
     if (!input) { log('no input box found'); return false; }
+    // Re-check RIGHT before we clear — closes the time-of-check/time-of-use race where
+    // the user starts typing between maybePing()'s guard and this wipe.
+    if (inputIsForeign()) { log('abort send: user draft in input'); return false; }
     weAreTyping = true;
     try {
       input.focus();
-      // Clear any leftover (e.g. a previous failed send that became a newline).
+      // Clear any leftover (e.g. a previous failed send that became a newline, or our
+      // own stuck ping). Safe now: a foreign user draft was rejected just above.
       try { document.execCommand('selectAll', false, null); document.execCommand('delete', false, null); } catch (e) {}
       var ok = false;
       try { ok = document.execCommand('insertText', false, text); } catch (e) { ok = false; }
@@ -466,6 +516,7 @@
         input.textContent = text;
         input.dispatchEvent(new InputEvent('input', { inputType: 'insertText', data: text, bubbles: true }));
       }
+      lastInsertedText = text; // remember it's ours, so a stuck copy isn't read as a user draft
       // Submit: prefer a send button, else Enter.
       var sendBtn = findSendButton();
       if (sendBtn) {
@@ -481,11 +532,18 @@
   }
 
   function findSendButton() {
+    // Claude's real submit control is a <button type="submit" class="sendButton_…">
+    // with NO aria-label (confirmed against the live bundle). The old [aria-label*="Send"]
+    // selector therefore NEVER matched, so every ping fell back to a synthetic Enter —
+    // fragile (untrusted key events can be dropped, stranding the ping text in the box).
+    // Prefer the real button; scope to the footer, fall back to document-wide.
     var footer = $(SIGNALS.footer);
-    if (!footer) return null;
-    // TUNE (Phase 3): confirm the real send-button selector against the live panel.
-    // Note: footerButtonPrimary_ is the MODE button, not send — so we can't key off it here.
-    return $('[aria-label*="Send" i]', footer) || null;
+    var btn = (footer && $(SIGNALS.sendButton, footer)) || $(SIGNALS.sendButton);
+    // While Claude is busy this same button acts as Stop/interrupt — never click it then
+    // (we only get here in WAITING_CONTINUE, but guard anyway so a mid-turn race can't
+    // interrupt Claude). disabled also means nothing to send.
+    if (btn && !btn.disabled && !isStreaming()) return btn;
+    return null;
   }
 
   function buildPingText() {
@@ -571,7 +629,9 @@
 
   // ── User activity detection (don't fight a returning user) ───────────────────
   var lastUserActivity = 0;
-  ['keydown', 'pointerdown'].forEach(function (evt) {
+  // 'input' is included so any actual text change the user makes registers as activity
+  // even if its keydown was missed (e.g. paste, IME, or a dropped key during jank).
+  ['keydown', 'pointerdown', 'input'].forEach(function (evt) {
     document.addEventListener(evt, function (e) {
       if (weAreTyping) return; // ignore our own synthetic events
       // Only count activity INSIDE the input box — clicking our button or elsewhere
@@ -692,7 +752,7 @@
   function maybePing(text) {
     if (userRecentlyActive()) { log('paused: user active'); return false; }
     if (inQuietHours()) { log('paused: quiet hours'); return false; }
-    if (inputText() !== '') { log('paused: user draft in input'); return false; }
+    if (inputIsForeign()) { log('paused: user draft in input'); return false; }
     if ((Date.now() - lastSendAt) < 3000) return false; // anti double-fire
 
     if (setInputAndSend(text)) {

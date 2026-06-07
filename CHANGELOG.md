@@ -1,5 +1,13 @@
 # Changelog
 
+## \[0.2.6] - 2026-06-07
+
+### Fixed
+
+* **The panel no longer freezes ("no response, stuck") every few minutes during a shift.** The injected loop read `document.body.innerText` 5–8 times per `tick()` (once a second), and `innerText` forces a *synchronous reflow of the entire conversation DOM*. Running on the same main thread as Claude's UI, that reflow storm periodically froze the panel — and got worse the longer (and larger) the conversation grew, matching the "once every few minutes" report. The detectors now read `textContent` (same characters, zero layout — every consumer only slices the tail and regex-matches, so rendered-vs-raw is immaterial), **scoped to Claude's transcript/messages container** instead of the whole `document.body`, and **memoized per tick** so those 5–8 reads collapse into one. Scoping to the transcript also avoids a subtle false-positive: Claude's footer usage meter renders the literal strings "usage limits" / "Resets <time>", which—at the end of `body`, inside the scanned tail—would have tripped `looksRateLimited()` and silently put a *finished* shift to sleep instead of stopping it. `sampleGrowth()` is now a no-op while the shift is OFF instead of materializing the transcript every second.
+* **Your in-progress message is no longer wiped when a "continue" ping fires ("my last request wasn't even captured — I had to retype it").** `setInputAndSend()` did `selectAll`+`delete` on the input, and the only guard was a check in `maybePing()` that ran *before* the wipe — a time-of-check/time-of-use race: start typing in that gap and your draft was selected-all-deleted, replaced with "continue", and sent. Claude keeps the draft only in memory, so a reload lost it for good. The clear is now re-guarded *immediately* before it runs (`inputIsForeign()`), aborting if anything we didn't type is in the box; user-activity detection also now listens for `input` events (paste/IME/dropped keys), not just `keydown`/`pointerdown`.
+* **Pings now submit via Claude's real Send button instead of a fragile synthetic Enter.** `findSendButton()` searched for `[aria-label*="Send"]`, but Claude's submit control is a `<button type="submit" class="sendButton_…">` with **no aria-label** — so it never matched and every ping fell back to dispatching an untrusted `Enter` key event, which can be dropped, stranding the ping text in the input. We now click the real button (scoped to the footer; skipped while busy/streaming so we never hit its Stop/interrupt mode), falling back to Enter only if it's absent. A ping we did leave stuck is now recognized as ours (not a user draft) so it can be cleared and resent rather than blocking further pings.
+
 ## \[0.2.5] - 2026-06-06
 
 ### Fixed
