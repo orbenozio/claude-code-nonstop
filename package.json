@@ -2,7 +2,7 @@
   "name": "claude-code-nonstop",
   "displayName": "Claude Code Nonstop",
   "description": "Keep Claude Code going across usage limits — a panel toggle that pings Claude to continue and, when you hit a rate limit, waits it out and resumes automatically when the window reopens.",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "publisher": "OrBenozio",
   "license": "MIT",
   "icon": "media/icon.png",

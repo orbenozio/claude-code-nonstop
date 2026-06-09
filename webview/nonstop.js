@@ -1181,26 +1181,22 @@
     var st = document.createElement('style');
     st.id = 'nonstop-style';
     st.textContent =
-      // The SVG infinity is coloured via currentColor — deterministic ON/OFF. Colours come
-      // from VS Code theme variables (with safe fallbacks) so OFF/ON read correctly on both
-      // light and dark themes instead of a hard-coded grey that can fail contrast on light.
-      // OFF: the theme's dim icon colour. padding 4px 7px keeps the hit target ~26px.
+      // Toggle button per the #orb-tools convention (claude-panel-button skill): three
+      // distinct states - base (dim), :hover, and .ns-on (lit) - so the button behaves like
+      // its sibling tools in the shared toolbar. Same mechanics as the skill's reference, but
+      // in Nonstop's gold accent instead of the default blue. The SVG infinity is coloured
+      // via currentColor (emoji render grey/inconsistently in the webview).
+      // OFF: dim grey. padding 4px 7px keeps the hit target ~26px.
       '#nonstop-btn{background:transparent;border:none;cursor:pointer;' +
       'padding:4px 7px;line-height:0;vertical-align:middle;border-radius:6px;' +
-      'color:var(--vscode-icon-foreground,#8a8a8a);opacity:.6;' +
-      'transition:color .15s,opacity .15s,background .15s,box-shadow .15s;}' +
+      'color:#8a8a8a;opacity:.6;transition:color .15s,opacity .15s,background .15s;}' +
       '#nonstop-btn svg{display:block;width:18px;height:18px;}' +
-      '#nonstop-btn:hover{opacity:.85;}' +
-      '#nonstop-btn:focus-visible{outline:2px solid var(--vscode-focusBorder,#5090EB);outline-offset:1px;}' +
-      // ON: the theme's accent infinity on a gold "pill" so an active auto-shift stands out.
-      '#nonstop-btn.ns-on{color:var(--vscode-focusBorder,#5090EB);opacity:1;background:rgba(255,215,0,.18);' +
-      'box-shadow:0 0 6px rgba(255,215,0,.55);}' +
-      // The pulse is attention-grabbing on purpose (a shift is auto-driving Claude), but
-      // respect reduced-motion: there the static gold pill + glow alone signals ON.
-      '@media (prefers-reduced-motion: no-preference){' +
-      '#nonstop-btn.ns-on{animation:ns-pulse 1.8s ease-in-out infinite;}' +
-      '@keyframes ns-pulse{0%,100%{transform:scale(1);box-shadow:0 0 4px rgba(255,215,0,.45)}' +
-      '50%{transform:scale(1.12);box-shadow:0 0 9px rgba(255,215,0,.85)}}}';
+      '#nonstop-btn:hover{opacity:1;color:#e3b341;background:rgba(255,215,0,.16);}' +
+      '#nonstop-btn:focus-visible{outline:2px solid #e3b341;outline-offset:1px;}' +
+      // ON: lit gold accent on a subtle gold background — overrides the dim base.
+      '#nonstop-btn.ns-on{opacity:1;color:#e3b341;background:rgba(255,215,0,.22);}' +
+      // Press feedback.
+      '#nonstop-btn:active{transform:scale(.92);}';
     document.head.appendChild(st);
   }
 
@@ -1226,6 +1222,7 @@
     btn.type = 'button';
     btn.title = 'Nonstop: keep Claude working (ping + wait out rate limits). Right-click or Shift+F10 for settings.';
     btn.setAttribute('aria-label', 'Nonstop: toggle keep-going. Right-click or Shift+F10 for settings.');
+    btn.setAttribute('aria-pressed', isEnabled() ? 'true' : 'false'); // it's a toggle button
     btn.setAttribute('aria-haspopup', 'dialog');
     // Inline SVG infinity (Material "all_inclusive"), coloured via currentColor so
     // ON/OFF is deterministic — the ♾️ emoji rendered unreliably (grey) in the webview.
@@ -1255,6 +1252,7 @@
     // and a reloaded panel claims it within a tick, so don't gate the visual on it.
     var on = isEnabled();
     btn.classList.toggle('ns-on', on);
+    btn.setAttribute('aria-pressed', on ? 'true' : 'false'); // toggle-button state for a11y
     btn.title = (on ? 'Nonstop: ON (click to stop)' : 'Nonstop: OFF (click to start)') +
       '. Right-click or Shift+F10 for settings.';
   }

@@ -1,5 +1,11 @@
 # Changelog
 
+## \[0.3.1] - 2026-06-09
+
+### Changed
+
+* **The ♾️ button now follows the shared `#orb-tools` toggle convention, so it behaves like the user's other injected panel buttons.** It gets a colored hover (its own gold accent, matching how each sibling tool hovers in its own hue), a press feedback (`:active` scale), and exposes `aria-pressed` for its on/off state. The lit ON state is now a clean static gold accent on a subtle gold background instead of the pulsing gold pill (so there's no animation to reduce-motion away). ON/OFF still reflects the real shift state from storage, not an optimistic guess.
+
 ## \[0.3.0] - 2026-06-09
 
 Reviewer-pass hardening: correctness, resilience, performance, security, and accessibility fixes across the host and the injected webview.
