@@ -27,6 +27,11 @@
     onDecision: 'stop',
     decisionAnswer: 'use your best judgment',
     doneStallPings: 3,
+    // After output stalls (looks done but no completion sentinel), retry the resume ping
+    // this many more times with a growing backoff before finally stopping — so a transient
+    // overnight failure to resume doesn't kill the shift. A real completion sentinel still
+    // stops immediately. 0 = give up as soon as the stall threshold is hit (old behaviour).
+    maxStallRetries: 4,
     sentinelDoneDetection: true,
     rateLimitFallbackMs: 18000000,
     userActivityPauseMs: 120000,
@@ -81,6 +86,7 @@
     lastStop: 'nonstop-last-stop',   // why/when the last shift ended (diagnostics)
     pendingRlSig: 'nonstop-pending-rl-sig', // signature of the limit we're currently sleeping out
     servedRl: 'nonstop-served-rl',   // signature of a limit we've ALREADY waited out (don't re-sleep it)
+    lastPing: 'nonstop-last-ping',   // the exact text we last typed (survives reload — see inputIsForeign)
   };
   function lsGet(k, d) { try { var v = localStorage.getItem(k); return v === null ? d : v; } catch (e) { return d; } }
   function lsSet(k, v) { try { localStorage.setItem(k, String(v)); } catch (e) {} }
@@ -167,11 +173,18 @@
   };
 
   // postMessage observation (best-effort; SPEC/RECON §1 — host→webview state msgs).
+  // There is no host->webview channel in the MVP, so this is speculative infrastructure.
+  // It runs inside Claude's webview document, where any other script (a sibling injector,
+  // an iframe, page content) could postMessage a forged {state:'running'} to suppress our
+  // pings — or {state:'waiting_input'} to force one. We therefore accept ONLY messages that
+  // carry our namespace marker (__nonstop:true), which a real host channel would send and a
+  // stray/hostile postMessage won't. Until that channel exists this layer simply stays inert.
   var observedState = null; // 'running' | 'waiting_input' | 'idle'
   var observedStateAt = 0;
   window.addEventListener('message', function (ev) {
     var d = ev && ev.data;
     if (!d || typeof d !== 'object') return;
+    if (d.__nonstop !== true) return; // reject anything not explicitly addressed to us
     var st = d.state || (d.payload && d.payload.state);
     if (st === 'running' || st === 'waiting_input' || st === 'idle') {
       observedState = st;
@@ -279,13 +292,26 @@
     return out.join(' | ');
   }
 
+  // Last (freshest) match of `re` in `text`. The newest notice sits at the BOTTOM of the
+  // transcript, so with two limit notices we want the later one's reset time — an earlier
+  // notice may carry an already-past time that would otherwise sleep us ~24h.
+  function lastMatch(text, re) {
+    var g = new RegExp(re.source, re.flags.indexOf('g') === -1 ? re.flags + 'g' : re.flags);
+    var m, last = null;
+    while ((m = g.exec(text)) !== null) {
+      last = m;
+      if (m.index === g.lastIndex) g.lastIndex++; // guard zero-width matches
+    }
+    return last;
+  }
+
   function detectRateLimit() {
     var text = panelText();
     if (!text) return null;
     // Only look at the tail (most recent messages) to limit cost / false hits.
     var tail = text.slice(-4000);
     for (var i = 0; i < SIGNALS.rateLimitRegexes.length; i++) {
-      var m = tail.match(SIGNALS.rateLimitRegexes[i]);
+      var m = lastMatch(tail, SIGNALS.rateLimitRegexes[i]); // freshest occurrence, not the first
       if (m) return { matched: true, captured: m[1] || null };
     }
     return null;
@@ -338,11 +364,18 @@
     if (rl && rl.captured) return 't:' + rl.captured;
     var tail = (panelText() || '').slice(-4000);
     for (var i = 0; i < SIGNALS.resetTimeRegexes.length; i++) {
-      var m = tail.match(SIGNALS.resetTimeRegexes[i]);
+      var m = lastMatch(tail, SIGNALS.resetTimeRegexes[i]);
       if (m) return 't:' + m[1];
     }
     var idx = tail.search(LOOKS_LIMITED_RE);
-    if (idx >= 0) return 's:' + tail.slice(idx, idx + 80).replace(/\s+/g, ' ').trim();
+    if (idx >= 0) {
+      // Fixed-window notice with no reset time: key only on the limit PHRASE, stripped of
+      // digits/punctuation. The raw snippet shifts as the transcript scrolls between sleep
+      // and wake, which would change the signature and let the ~24h re-sleep bug back in;
+      // normalising to just the lowercase letters keeps it stable across that movement.
+      var norm = tail.slice(idx, idx + 80).toLowerCase().replace(/[^a-z]+/g, ' ').replace(/\s+/g, ' ').trim();
+      return 's:' + norm;
+    }
     return '';
   }
 
@@ -389,9 +422,13 @@
     // Layer 3: DOM reflection.
     if (matchAny(SIGNALS.workingHints)) return 'WORKING';
 
-    // Layer 4: heuristic — input present & empty & nothing working = ready to ping.
+    // Layer 4: heuristic — input present and holding nothing foreign (empty, or only our own
+    // stranded ping) = ready to (re)ping. Treating our own stuck ping as WAITING_CONTINUE is
+    // what actually lets a reloaded panel clear and resend it: LS.lastPing makes the
+    // not-foreign check survive the reload, and setInputAndSend re-guards inputIsForeign right
+    // before it clears, so a genuine user draft is still never touched.
     var input = getInput();
-    if (input && inputText() === '') return 'WAITING_CONTINUE';
+    if (input && !inputIsForeign()) return 'WAITING_CONTINUE';
     return 'UNKNOWN';
   }
 
@@ -490,10 +527,16 @@
   // we can still clear/resend it. This is the guard that stops us from selectAll+delete
   // -ing a request the user is mid-typing — which used to wipe it unrecoverably (Claude
   // keeps the draft only in memory, so a reload lost it: "my request wasn't captured").
+  //
+  // lastInsertedText is in-memory and resets to '' on reload. If the panel reloads while
+  // our ping is stranded in the box, the in-memory value is gone and the ping would read
+  // as a foreign user draft — blocked forever (never cleared, never resent). So we fall
+  // back to the persisted copy (LS.lastPing) to still recognise our own stuck ping.
   function inputIsForeign() {
     var t = inputText();
     if (t === '') return false;
-    return t !== (lastInsertedText || '').trim();
+    var mine = (lastInsertedText || lsGet(LS.lastPing, '') || '').trim();
+    return t !== mine;
   }
 
   function setInputAndSend(text) {
@@ -517,6 +560,7 @@
         input.dispatchEvent(new InputEvent('input', { inputType: 'insertText', data: text, bubbles: true }));
       }
       lastInsertedText = text; // remember it's ours, so a stuck copy isn't read as a user draft
+      lsSet(LS.lastPing, text); // persist it too, so a reload still recognises our own stuck ping
       // Submit: prefer a send button, else Enter.
       var sendBtn = findSendButton();
       if (sendBtn) {
@@ -568,7 +612,7 @@
     lsSet(LS.pendingRlSig, '');
     lsSet(LS.servedRl, '');
     // Reset in-memory ping/stall state for a fresh shift.
-    stallCount = 0; lastPingSig = null; lastPingAt = 0; lastSendAt = 0; lastGrowthAt = 0;
+    stallCount = 0; stallRetries = 0; lastPingSig = null; lastPingAt = 0; lastSendAt = 0; lastGrowthAt = 0;
     baseSentinel = sentinelCount(); sentinelPings = 0;
     log('shift started; owner', INSTANCE_ID);
     updateButton();
@@ -576,6 +620,9 @@
   function stopShift(reason) {
     lsSet(LS.enabled, 'false');
     lsSet(LS.sleepUntil, '');
+    // Release ownership so a stale beat pointing at this (now-idle) instance can't briefly
+    // block another panel from taking a fresh shift.
+    if (isOwner()) { lsSet(LS.ownerId, ''); lsSet(LS.ownerBeat, 0); }
     lsSet(LS.lastStop, (reason || 'manual') + ' @ ' + new Date().toISOString());
     log('shift stopped:', reason || 'manual');
     updateButton();
@@ -608,8 +655,9 @@
   }
 
   // ── Done detection (sentinel + output stall) ─────────────────────────────────
-  var lastOutputSig = '';
   var stallCount = 0;
+  var stallRetries = 0;   // how many growing-backoff resume retries we've spent on this stall
+  var STALL_MAX_INTERVAL_MS = 900000; // cap the backoff growth at 15 min between resume tries
   var baseSentinel = 0;   // sentinel occurrences already present when the shift started
   var sentinelPings = 0;  // sentinels WE injected via our own ping instructions
   function outputSignature() {
@@ -698,7 +746,7 @@
       enterSleep();
       return;
     }
-    if (state === 'WORKING') { stallCount = 0; lastOutputSig = outputSignature(); return; }
+    if (state === 'WORKING') { stallCount = 0; stallRetries = 0; return; }
 
     if (state === 'DONE' || sawDoneSentinel()) { stopShift('done-sentinel'); return; }
 
@@ -717,8 +765,11 @@
 
     if (state === 'WAITING_CONTINUE') {
       // Act only at PING cadence — not every poll (counting stall per-poll wrongly
-      // declared "done" within seconds and never pinged).
-      if ((Date.now() - lastPingAt) < liveCfg('pingIntervalMs')) return;
+      // declared "done" within seconds and never pinged). While we're in stall-retry
+      // backoff the interval grows (2x per retry, capped) so repeated failed resume
+      // attempts space out instead of hammering; a fresh, progressing shift uses the base.
+      var effInterval = Math.min(liveCfg('pingIntervalMs') * Math.pow(2, stallRetries), STALL_MAX_INTERVAL_MS);
+      if ((Date.now() - lastPingAt) < effInterval) return;
 
       // Done heuristic: did output change since our previous ping? Only meaningful
       // once we've actually pinged at least once (lastPingSig !== null).
@@ -737,13 +788,25 @@
             enterSleep();
             return;
           }
-          stopShift('output-stall');
-          return;
+          // Not a limit. Rather than give up immediately, retry the resume a few times with
+          // a growing backoff (the effInterval above) — a transient overnight failure to
+          // resume shouldn't end an unattended shift. A real completion sentinel still stops
+          // instantly (handled above as DONE), and maxRuntime/maxPings still cap us.
+          if (stallRetries < liveCfg('maxStallRetries')) {
+            stallRetries++;
+            stallCount = 0;
+            log('output stalled — resume retry', stallRetries, 'of', liveCfg('maxStallRetries'), '(backoff grows)');
+            // fall through and ping again this tick
+          } else {
+            stopShift('output-stall');
+            return;
+          }
         }
       } else {
         stallCount = 0;
+        stallRetries = 0; // real progress → reset the backoff escalation
       }
-      if (maybePing(buildPingText(), false)) {
+      if (maybePing(buildPingText())) {
         lastPingSig = outputSignature();
       }
     }
@@ -856,19 +919,40 @@
 
   // ── The ON/OFF button ─────────────────────────────────────────────────────────
   // ── Right-click settings popup ───────────────────────────────────────────────
+  var _settingsOpener = null; // element to restore focus to when the popup closes
   function closeSettingsPopup() {
     var p = document.getElementById('nonstop-settings');
-    if (p) { if (p._cleanup) p._cleanup(); p.remove(); }
+    if (p) {
+      if (p._cleanup) p._cleanup();
+      p.remove();
+      // Return focus to whatever opened the popup (the button), so keyboard users aren't dropped.
+      try { if (_settingsOpener && _settingsOpener.focus) _settingsOpener.focus(); } catch (e) {}
+      _settingsOpener = null;
+    }
   }
   function showSettingsPopup(e) {
     closeSettingsPopup();
+    // Anchor: the pointer position for a right-click, or the button's corner when opened
+    // from the keyboard (no pointer coords). Remember the opener to restore focus on close.
+    var btn = document.getElementById('nonstop-btn');
+    _settingsOpener = (document.activeElement && document.activeElement.focus) ? document.activeElement : btn;
+    var ax, ay;
+    if (e && typeof e.clientX === 'number' && (e.clientX || e.clientY)) { ax = e.clientX; ay = e.clientY; }
+    else if (btn && btn.getBoundingClientRect) { var br = btn.getBoundingClientRect(); ax = br.left; ay = br.top; }
+    else { ax = 100; ay = 100; }
+
     var pop = document.createElement('div');
     pop.id = 'nonstop-settings';
+    // Dialog semantics so screen readers announce it and Esc/focus management make sense.
+    pop.setAttribute('role', 'dialog');
+    pop.setAttribute('aria-modal', 'true');
+    pop.setAttribute('aria-label', 'Nonstop settings');
+    pop.tabIndex = -1; // focusable container so we can move focus into the dialog on open
     pop.style.cssText = 'position:fixed;z-index:999999;background:var(--vscode-editorWidget-background,#252526);' +
       'color:var(--vscode-editorWidget-foreground,#ccc);border:1px solid var(--vscode-editorWidget-border,#454545);' +
       'border-radius:6px;padding:10px;font-size:12px;box-shadow:0 4px 16px rgba(0,0,0,.4);min-width:240px;direction:ltr;';
-    var x = Math.min(e.clientX, window.innerWidth - 270);
-    var y = Math.min(e.clientY, window.innerHeight - 260);
+    var x = Math.min(ax, window.innerWidth - 270);
+    var y = Math.min(ay, window.innerHeight - 260);
     pop.style.left = Math.max(8, x) + 'px';
     pop.style.top = Math.max(8, y) + 'px';
 
@@ -876,6 +960,8 @@
       var r = document.createElement('div');
       r.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:8px;margin:4px 0;';
       var l = document.createElement('span'); l.textContent = label; l.style.whiteSpace = 'nowrap';
+      // Name the field for assistive tech (each row is just a span + control, no <label for>).
+      if (inputEl && !inputEl.getAttribute('aria-label')) inputEl.setAttribute('aria-label', label);
       r.appendChild(l); r.appendChild(inputEl); pop.appendChild(r);
     }
     // All inputs and selects share one width (border-box) so their right edges line up.
@@ -899,12 +985,19 @@
     }
 
     var title = document.createElement('div');
-    title.style.cssText = 'font-weight:bold;margin-bottom:2px;';
-    title.textContent = '♾️ Nonstop' + (CFG.version ? ' v' + CFG.version : '') + ' ';
+    title.style.cssText = 'font-weight:bold;margin-bottom:2px;display:flex;align-items:center;gap:5px;';
+    // Same infinity glyph as the button (the ♾️ emoji rendered grey/unreliably in the webview).
+    title.innerHTML = '<svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor" aria-hidden="true">' +
+      '<path d="M18.6 6.62c-1.44 0-2.8.56-3.77 1.53L12 10.66 10.48 12h.01L7.8 14.39c-.64.64-1.49.99-2.4.99-1.87 0-3.39-1.51-3.39-3.38S3.53 8.62 5.4 8.62c.91 0 1.76.35 2.44 1.03l1.13 1 1.51-1.34L9.22 8.2C8.2 7.18 6.84 6.62 5.4 6.62 2.42 6.62 0 9.04 0 12s2.42 5.38 5.4 5.38c1.44 0 2.8-.56 3.77-1.53l2.83-2.5.01.01L14.49 11h-.01l2.69-2.39c.64-.64 1.49-.99 2.4-.99 1.87 0 3.39 1.51 3.39 3.38s-1.52 3.38-3.39 3.38c-.9 0-1.76-.35-2.44-1.03l-1.14-1.01-1.51 1.34 1.27 1.12c1.02 1.01 2.37 1.57 3.82 1.57 2.98 0 5.4-2.42 5.4-5.38s-2.42-5.38-5.4-5.38z"/></svg>';
+    var titleText = document.createElement('span');
+    titleText.textContent = 'Nonstop' + (CFG.version ? ' v' + CFG.version : '');
+    title.appendChild(titleText);
     var titleState = document.createElement('span');
     var on = isEnabled();
     titleState.textContent = on ? '● ON' : '● OFF';
-    titleState.style.cssText = 'font-weight:normal;font-size:11px;color:' + (on ? '#4ec9b0' : '#888') + ';';
+    // Theme-derived so the state colour holds contrast on light themes too.
+    titleState.style.cssText = 'font-weight:normal;font-size:11px;margin-left:auto;color:' +
+      (on ? 'var(--vscode-charts-green,#4ec9b0)' : 'var(--vscode-descriptionForeground,#888)') + ';';
     title.appendChild(titleState);
     pop.appendChild(title);
     var hint = document.createElement('div');
@@ -978,15 +1071,42 @@
     row('On decision prompt', dec);
 
     var reset = document.createElement('button');
+    reset.type = 'button';
     reset.textContent = 'Reset to defaults';
     reset.style.cssText = 'margin-top:8px;width:100%;cursor:pointer;background:var(--vscode-button-secondaryBackground,#3a3d41);' +
       'color:var(--vscode-button-secondaryForeground,#ccc);border:none;border-radius:3px;padding:4px;';
+    var resetMsg = document.createElement('div');
+    resetMsg.style.cssText = 'text-align:center;font-size:11px;height:13px;margin-top:4px;' +
+      'color:var(--vscode-charts-green,#4ec9b0);opacity:0;transition:opacity .15s;';
+    resetMsg.textContent = '✓ Reset to defaults';
     reset.onclick = function () {
       ['pingIntervalMs', 'pingText', 'quietHours', 'maxPings', 'maxRuntimeMs',
         'onPermission', 'permissionGraceMs', 'onDecision'].forEach(function (k) { setOverride(k, null); });
-      closeSettingsPopup();
+      // Refresh the visible fields to the restored defaults rather than closing — the reset
+      // is then visible and immediately re-editable, no destructive close-and-reopen.
+      interval.value = Math.round(liveCfg('pingIntervalMs') / 1000);
+      ptext.value = liveCfg('pingText');
+      quiet.value = liveCfg('quietHours') || '';
+      mp.value = liveCfg('maxPings');
+      mr.value = Math.round(liveCfg('maxRuntimeMs') / 60000); updMrHint();
+      perm.value = liveCfg('onPermission');
+      grace.value = Math.round(liveCfg('permissionGraceMs') / 1000);
+      dec.value = liveCfg('onDecision');
+      resetMsg.style.opacity = '1';
+      setTimeout(function () { resetMsg.style.opacity = '0'; }, 1500);
     };
     pop.appendChild(reset);
+    pop.appendChild(resetMsg);
+
+    // Brief "saved" cue on any field change (change bubbles, so one listener covers all
+    // fields) — confirms the blur-to-save took effect without a per-field handler.
+    pop.addEventListener('change', function (ev) {
+      var t = ev.target;
+      if (!t || !t.style) return;
+      var orig = t.style.borderColor;
+      t.style.borderColor = 'var(--vscode-charts-green,#4ec9b0)';
+      setTimeout(function () { t.style.borderColor = orig || ''; }, 600);
+    });
 
     // Never let it spill past the panel: cap width to the viewport, then re-clamp
     // position using the popup's real measured size (it grows with labels/hints, and
@@ -996,22 +1116,40 @@
     pop.style.overflowY = 'auto';
     document.body.appendChild(pop);
     var rect = pop.getBoundingClientRect();
-    var left = Math.min(e.clientX, window.innerWidth - rect.width - 12);
+    var left = Math.min(ax, window.innerWidth - rect.width - 12);
     // Bottom margin is generous: the popup opens from the footer button, so leave
     // room above the footer/input so its last row isn't clipped.
-    var top = Math.min(e.clientY, window.innerHeight - rect.height - 24);
+    var top = Math.min(ay, window.innerHeight - rect.height - 24);
     pop.style.left = Math.max(8, left) + 'px';
     pop.style.top = Math.max(8, top) + 'px';
 
+    // Move focus into the dialog so keyboard users land inside it (and the Esc/Tab
+    // handlers below are meaningful). Restored to the opener on close.
+    function focusables() {
+      return pop.querySelectorAll('input,select,button,[tabindex]:not([tabindex="-1"])');
+    }
+    var ff = focusables();
+    try { (ff.length ? ff[0] : pop).focus(); } catch (e2) {}
+
     function outside(ev) { if (!pop.contains(ev.target)) closeSettingsPopup(); }
-    function esc(ev) { if (ev.key === 'Escape') closeSettingsPopup(); }
+    function keyHandler(ev) {
+      if (ev.key === 'Escape') { closeSettingsPopup(); return; }
+      if (ev.key !== 'Tab') return;
+      // Trap Tab inside the dialog so focus can't fall through to Claude's DOM behind it.
+      var f = focusables();
+      if (!f.length) return;
+      var first = f[0], last = f[f.length - 1], active = document.activeElement;
+      if (!pop.contains(active)) { ev.preventDefault(); first.focus(); }
+      else if (ev.shiftKey && active === first) { ev.preventDefault(); last.focus(); }
+      else if (!ev.shiftKey && active === last) { ev.preventDefault(); first.focus(); }
+    }
     pop._cleanup = function () {
       document.removeEventListener('mousedown', outside, true);
-      document.removeEventListener('keydown', esc, true);
+      document.removeEventListener('keydown', keyHandler, true);
     };
     setTimeout(function () {
       document.addEventListener('mousedown', outside, true);
-      document.addEventListener('keydown', esc, true);
+      document.addEventListener('keydown', keyHandler, true);
     }, 0);
   }
 
@@ -1027,7 +1165,7 @@
     if (!footer) return null;
     var bar = existing || document.createElement('div');
     bar.id = 'orb-tools';
-    bar.style.cssText = 'display:inline-flex;align-items:center;gap:2px;';
+    bar.style.cssText = 'display:inline-flex;align-items:center;gap:4px;';
     var modeBtn = footer.querySelector(SIGNALS.modeButton);
     var modeContainer = modeBtn ? modeBtn.parentElement : null;
     if (modeContainer && modeContainer.parentNode) {
@@ -1043,28 +1181,40 @@
     var st = document.createElement('style');
     st.id = 'nonstop-style';
     st.textContent =
-      // The SVG infinity is coloured via currentColor — deterministic ON/OFF.
-      // OFF: dim grey.
+      // The SVG infinity is coloured via currentColor — deterministic ON/OFF. Colours come
+      // from VS Code theme variables (with safe fallbacks) so OFF/ON read correctly on both
+      // light and dark themes instead of a hard-coded grey that can fail contrast on light.
+      // OFF: the theme's dim icon colour. padding 4px 7px keeps the hit target ~26px.
       '#nonstop-btn{background:transparent;border:none;cursor:pointer;' +
-      'padding:3px 6px;line-height:0;vertical-align:middle;border-radius:6px;' +
-      'color:#8a8a8a;opacity:.6;transition:color .15s,opacity .15s,background .15s,box-shadow .15s;}' +
+      'padding:4px 7px;line-height:0;vertical-align:middle;border-radius:6px;' +
+      'color:var(--vscode-icon-foreground,#8a8a8a);opacity:.6;' +
+      'transition:color .15s,opacity .15s,background .15s,box-shadow .15s;}' +
       '#nonstop-btn svg{display:block;width:18px;height:18px;}' +
       '#nonstop-btn:hover{opacity:.85;}' +
-      // ON: blue infinity on a pulsing gold "pill".
-      '#nonstop-btn.ns-on{color:#5090EB;opacity:1;background:rgba(255,215,0,.18);' +
-      'box-shadow:0 0 6px rgba(255,215,0,.55);animation:ns-pulse 1.8s ease-in-out infinite;}' +
+      '#nonstop-btn:focus-visible{outline:2px solid var(--vscode-focusBorder,#5090EB);outline-offset:1px;}' +
+      // ON: the theme's accent infinity on a gold "pill" so an active auto-shift stands out.
+      '#nonstop-btn.ns-on{color:var(--vscode-focusBorder,#5090EB);opacity:1;background:rgba(255,215,0,.18);' +
+      'box-shadow:0 0 6px rgba(255,215,0,.55);}' +
+      // The pulse is attention-grabbing on purpose (a shift is auto-driving Claude), but
+      // respect reduced-motion: there the static gold pill + glow alone signals ON.
+      '@media (prefers-reduced-motion: no-preference){' +
+      '#nonstop-btn.ns-on{animation:ns-pulse 1.8s ease-in-out infinite;}' +
       '@keyframes ns-pulse{0%,100%{transform:scale(1);box-shadow:0 0 4px rgba(255,215,0,.45)}' +
-      '50%{transform:scale(1.12);box-shadow:0 0 9px rgba(255,215,0,.85)}}';
+      '50%{transform:scale(1.12);box-shadow:0 0 9px rgba(255,215,0,.85)}}}';
     document.head.appendChild(st);
   }
 
   function injectButton() {
-    if (document.getElementById('nonstop-btn')) {
-      // Button exists — but make sure it's still docked in the live shared toolbar
-      // (Claude may have re-rendered the footer and detached #orb-tools).
+    var btn0 = document.getElementById('nonstop-btn');
+    if (btn0) {
+      // Button exists. Fast path: if it's still docked inside a live #orb-tools, there's
+      // nothing to do — skip the footer re-query that ran on every interval before. Only
+      // when it's been detached (Claude re-rendered the footer) do we rebuild the toolbar
+      // and re-dock.
+      var existingBar = document.getElementById('orb-tools');
+      if (existingBar && existingBar.isConnected && btn0.parentNode === existingBar) return;
       var bar0 = ensureToolbar();
-      var btn0 = document.getElementById('nonstop-btn');
-      if (bar0 && btn0 && btn0.parentNode !== bar0) bar0.appendChild(btn0);
+      if (bar0 && btn0.parentNode !== bar0) bar0.appendChild(btn0);
       return;
     }
     var bar = ensureToolbar();
@@ -1074,8 +1224,9 @@
     var btn = document.createElement('button');
     btn.id = 'nonstop-btn';
     btn.type = 'button';
-    btn.title = 'Nonstop: keep Claude working (ping + wait out rate limits)';
-    btn.setAttribute('aria-label', 'Nonstop');
+    btn.title = 'Nonstop: keep Claude working (ping + wait out rate limits). Right-click or Shift+F10 for settings.';
+    btn.setAttribute('aria-label', 'Nonstop: toggle keep-going. Right-click or Shift+F10 for settings.');
+    btn.setAttribute('aria-haspopup', 'dialog');
     // Inline SVG infinity (Material "all_inclusive"), coloured via currentColor so
     // ON/OFF is deterministic — the ♾️ emoji rendered unreliably (grey) in the webview.
     btn.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">' +
@@ -1083,6 +1234,13 @@
     btn.addEventListener('mousedown', function (e) { e.preventDefault(); });
     btn.addEventListener('click', function (e) { e.preventDefault(); e.stopPropagation(); toggleShift(); });
     btn.addEventListener('contextmenu', function (e) { e.preventDefault(); e.stopPropagation(); showSettingsPopup(e); });
+    // Keyboard access to settings (the context menu is mouse-only): the dedicated
+    // ContextMenu key, or Shift+F10 — the platform-standard "open context menu" chord.
+    btn.addEventListener('keydown', function (e) {
+      if (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) {
+        e.preventDefault(); e.stopPropagation(); showSettingsPopup(e);
+      }
+    });
 
     // Dock into the shared #orb-tools toolbar (created/positioned by ensureToolbar),
     // so we sit alongside the user's other injected tools instead of in our own wrapper.
@@ -1097,11 +1255,15 @@
     // and a reloaded panel claims it within a tick, so don't gate the visual on it.
     var on = isEnabled();
     btn.classList.toggle('ns-on', on);
-    btn.title = on ? 'Nonstop: ON (click to stop)' : 'Nonstop: OFF (click to start)';
+    btn.title = (on ? 'Nonstop: ON (click to stop)' : 'Nonstop: OFF (click to start)') +
+      '. Right-click or Shift+F10 for settings.';
   }
 
   // ── Boot ───────────────────────────────────────────────────────────────────────
-  setInterval(injectButton, 1500); // re-inject if Claude re-renders the footer
+  // 2.5s is responsive enough to re-dock after a footer re-render while doing far less
+  // work than the old 1.5s — and the fast path above makes the common (still-docked) tick
+  // a single getElementById with no footer query.
+  setInterval(injectButton, 2500); // re-inject if Claude re-renders the footer
   setInterval(sampleGrowth, CFG.pollMs); // always sample output growth for streaming detection
   setInterval(tick, CFG.pollMs);
   sampleGrowth();

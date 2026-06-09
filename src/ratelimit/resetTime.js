@@ -32,19 +32,32 @@ const RESET_TIME_REGEXES = [
   /limit will reset at\s+(\d{1,2}:\d{2}\s*[ap]m\b(?:\s*\([^)]+\))?)/i,
 ];
 
+// Last (freshest) match of `re` in `text`. A real transcript shows the newest notice at
+// the BOTTOM, so when two limit notices are present we want the later one's reset time —
+// an earlier notice may carry an already-past time that would otherwise sleep us ~24h.
+function lastMatch(text, re) {
+  const g = new RegExp(re.source, re.flags.indexOf('g') === -1 ? re.flags + 'g' : re.flags);
+  let m, last = null;
+  while ((m = g.exec(text)) !== null) {
+    last = m;
+    if (m.index === g.lastIndex) g.lastIndex++; // guard against zero-width matches
+  }
+  return last;
+}
+
 /** Scan text for a rate-limit notice. Returns { matched, captured } or null. */
 function detectRateLimit(text) {
   if (!text) return null;
   const tail = String(text).slice(-4000);
   for (let i = 0; i < RATE_LIMIT_REGEXES.length; i++) {
-    const m = tail.match(RATE_LIMIT_REGEXES[i]);
+    const m = lastMatch(tail, RATE_LIMIT_REGEXES[i]); // freshest occurrence, not the first
     if (m) {
       let captured = m[1] || null;
       // Notice without an inline time (e.g. "hit your usage limit") — try the loose
       // extractors so the caller still gets a reset time when one is nearby.
       if (!captured) {
         for (let j = 0; j < RESET_TIME_REGEXES.length; j++) {
-          const t = tail.match(RESET_TIME_REGEXES[j]);
+          const t = lastMatch(tail, RESET_TIME_REGEXES[j]);
           if (t) { captured = t[1]; break; }
         }
       }

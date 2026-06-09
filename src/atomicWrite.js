@@ -9,9 +9,28 @@ const path = require('path');
  * never sees a half-written file. Mitigates the write race with another extension
  * editing the same file (SPEC.md §6.4 / §7.2).
  */
+// Sleep synchronously for `ms` WITHOUT a CPU-spinning busy-wait. Atomics.wait parks the
+// thread on a futex that never gets notified, so it yields the core instead of pegging it
+// at 100%. The wait only happens on the RARE retry path (another writer clobbered us),
+// capped at a few hundred ms total — the common path verifies on the first try and never
+// sleeps — so briefly parking here is acceptable and far cheaper than spinning.
+function sleepSync(ms) {
+  if (ms <= 0) return;
+  try {
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+  } catch (_) {
+    // SharedArrayBuffer unavailable (shouldn't happen on modern Node) — degrade to a
+    // bounded spin rather than crash.
+    const until = Date.now() + ms;
+    while (Date.now() < until) { /* bounded fallback */ }
+  }
+}
+
 function writeAtomic(filePath, content) {
   const dir = path.dirname(filePath);
-  const tmp = path.join(dir, `.nonstop-tmp-${process.pid}-${Date.now()}`);
+  // pid + time + random so two writes in the same ms (focus + config change) can't collide
+  // on the temp name and clobber each other before the rename.
+  const tmp = path.join(dir, `.nonstop-tmp-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
   fs.writeFileSync(tmp, content, 'utf8');
   try {
     fs.renameSync(tmp, filePath);
@@ -44,10 +63,9 @@ function writeAndVerify(filePath, content, verify, opts = {}) {
       readBack = '';
     }
     if (verify(readBack)) return true;
-    // Someone clobbered us; wait and retry.
+    // Someone clobbered us; park (no CPU spin) and retry with a growing backoff.
     if (attempt < retries) {
-      const until = Date.now() + backoffMs * (attempt + 1);
-      while (Date.now() < until) { /* tiny busy-wait; backoff is short */ }
+      sleepSync(backoffMs * (attempt + 1));
     }
   }
   return false;

@@ -2,7 +2,7 @@
   "name": "claude-code-nonstop",
   "displayName": "Claude Code Nonstop",
   "description": "Keep Claude Code going across usage limits — a panel toggle that pings Claude to continue and, when you hit a rate limit, waits it out and resumes automatically when the window reopens.",
-  "version": "0.2.6",
+  "version": "0.3.0",
   "publisher": "OrBenozio",
   "license": "MIT",
   "icon": "media/icon.png",
@@ -151,6 +151,13 @@
           "maximum": 20,
           "description": "Consecutive pings with no meaningful new output before declaring the task done."
         },
+        "nonstop.maxStallRetries": {
+          "type": "number",
+          "default": 4,
+          "minimum": 0,
+          "maximum": 20,
+          "description": "After output stalls (looks done but Claude sent no completion sentinel), retry the resume ping this many more times with a growing backoff before stopping the shift. Guards against a transient overnight failure to resume. A real completion sentinel still stops immediately. 0 = give up as soon as the stall threshold is hit."
+        },
         "nonstop.sentinelDoneDetection": {
           "type": "boolean",
           "default": true,
@@ -185,6 +192,6 @@
     }
   },
   "scripts": {
-    "test": "node test/run.js"
+    "test": "node test/run.js && node test/resettime-edges.js && node test/webview-behavior.js && node test/v030-behavior.js"
   }
 }

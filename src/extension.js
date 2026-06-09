@@ -41,6 +41,7 @@ function buildSeedConfig(version) {
     onDecision: c.get('onDecision', 'stop'),
     decisionAnswer: c.get('decisionAnswer', 'use your best judgment'),
     doneStallPings: c.get('doneStallPings', 3),
+    maxStallRetries: c.get('maxStallRetries', 4),
     sentinelDoneDetection: c.get('sentinelDoneDetection', true),
     rateLimitFallbackMs: c.get('rateLimitFallbackMs', 18000000),
     userActivityPauseMs: c.get('userActivityPauseMs', 120000),

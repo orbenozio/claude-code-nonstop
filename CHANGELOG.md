@@ -1,5 +1,32 @@
 # Changelog
 
+## \[0.3.0] - 2026-06-09
+
+Reviewer-pass hardening: correctness, resilience, performance, security, and accessibility fixes across the host and the injected webview.
+
+### Fixed
+
+* **The injected loop no longer blocks the Extension Host with a CPU-spinning busy-wait.** `atomicWrite`'s retry backoff (only taken when another injector clobbers our write) was a `while (Date.now() < until) {}` loop that pegged a core. It now parks the thread with `Atomics.wait` (no CPU spin), and the temp-file name gained a random suffix so two writes in the same millisecond can't collide.
+* **A shift now survives a transient failure to resume instead of dying until morning.** When output stalls and it isn't a rate limit, Nonstop used to stop immediately. It now retries the resume ping a few times with a growing backoff (`maxStallRetries`, default 4; doubles the interval each retry, capped at 15 min) before giving up - so a one-off dropped ping overnight doesn't end an unattended shift. A real completion sentinel still stops the shift immediately, and `maxRuntime`/`maxPings` still cap everything.
+* **A two-notice transcript now sleeps to the freshest reset time, not the oldest.** `detectRateLimit` took the first regex match in the tail; with two limit notices on screen that could be an older, already-past time (a path back into the ~24h silent-sleep bug). It now takes the last (bottom-most) match in both the host module and the webview copy.
+* **A fixed-window limit notice (no reset time) keeps a stable signature across a reload.** The fallback `rateLimitSignature` keyed on a raw 80-char snippet that shifts as the transcript scrolls between sleep and wake, which could resurrect the re-sleep bug. It now normalizes to just the limit phrase's letters.
+* **A ping left stranded in the input is now recovered after a panel reload instead of blocking the shift forever.** `inputIsForeign` compared only against an in-memory `lastInsertedText` that resets on reload, so a ping left in the box during a reload looked like a user draft. Two parts: the last ping text is now persisted (`LS.lastPing`) so a reloaded panel still recognizes its own stuck ping as ours, and `detectState` now routes a non-foreign input (empty, or only our own stranded ping) to `WAITING_CONTINUE` so the clear-and-resend path actually runs. A genuine user draft is still never touched - `setInputAndSend` re-checks `inputIsForeign` immediately before clearing.
+
+### Security
+
+* **The webview's `postMessage` listener no longer trusts arbitrary same-document messages.** It fed `observedState` (used by state detection) from any `message` event, so another script in Claude's document could forge a state to suppress or force pings. It now accepts only messages explicitly namespaced to us (`__nonstop: true`).
+
+### Changed
+
+* **Performance:** the footer button re-injector skips the footer DOM re-query on every tick when the button is still docked (fast `getElementById` path), and its interval relaxed from 1.5s to 2.5s.
+* **Accessibility:** the right-click settings popup is now reachable and usable from the keyboard - opens with the ContextMenu key or Shift+F10, is a real `role="dialog"` with `aria-modal` and a label, traps Tab, moves focus in on open and restores it on close, and every field carries an `aria-label`.
+* **Theming & motion:** the button and popup colors now derive from VS Code theme variables (correct contrast on light themes), a visible focus ring was added, the ON pulse animation respects `prefers-reduced-motion` (static gold pill when motion is reduced), and the button hit target grew slightly.
+* **Polish:** "Reset to defaults" now refreshes the fields inline with a confirmation instead of closing the popup; a brief "saved" cue flashes on any field change; the popup header uses the same infinity SVG as the button (not the unreliable emoji); the status bar's initial icon is no longer the misleading `$(sync)`; a stopped shift releases its ownership lease; dead code (`lastOutputSig`) removed.
+
+### Tests
+
+* Wired the behavioural webview tests and reset-time edge tests into `npm test` (was running only `run.js`). 67 unit tests plus the real-bundle integration test pass.
+
 ## \[0.2.6] - 2026-06-07
 
 ### Fixed

@@ -14,7 +14,9 @@ function create(vscode, context) {
   label = v ? 'Nonstop v' + v : 'Nonstop';
   statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
   statusBarItem.command = 'nonstop.showMenu';
-  statusBarItem.text = '$(sync) ' + label;
+  // Neutral icon for the brief moment before the first checkAndInject calls reflect();
+  // $(sync) read as "syncing/loading", which this isn't.
+  statusBarItem.text = '$(pulse) ' + label;
   statusBarItem.tooltip = 'Claude Code Nonstop — click for menu';
   statusBarItem.show();
   context.subscriptions.push(statusBarItem);
