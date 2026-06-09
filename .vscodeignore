@@ -3,6 +3,7 @@
 .gitignore
 .vscodeignore
 .claude/**
+.timelog/**
 
 # Secrets — MUST never ship in the VSIX (would publish the PAT publicly).
 .env
