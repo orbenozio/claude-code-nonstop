@@ -404,6 +404,15 @@
         input.textContent = text;
         input.dispatchEvent(new InputEvent('input', { inputType: 'insertText', data: text, bubbles: true }));
       }
+      // Safety re-check right before submitting: detectState() can be stale.
+      // If Claude resumed between our state-check and now, the Enter/button
+      // would interrupt the running process instead of sending — leave the input
+      // empty and bail so the next tick re-evaluates cleanly.
+      if (isStreaming() || matchAny(SIGNALS.workingHints)) {
+        try { document.execCommand('selectAll', false, null); document.execCommand('delete', false, null); } catch (e2) {}
+        log('pre-submit check: Claude resumed — draft cleared, will retry next tick');
+        return false;
+      }
       // Submit: prefer a send button, else Enter.
       var sendBtn = findSendButton();
       if (sendBtn) {

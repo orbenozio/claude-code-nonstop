@@ -1,5 +1,11 @@
 # Changelog
 
+## \[0.2.2] - 2026-06-14
+
+### Fixed
+
+* **Ping no longer interrupts a running Claude.** There was a race between state detection and the actual submit: `detectState()` could return `WAITING_CONTINUE` while Claude was about to resume, and the subsequent Enter/button press would interrupt the running process instead of sending the ping — leaving the draft text visible in the input. A safety re-check now runs immediately before submitting; if Claude has gone back to WORKING by then, the draft is cleared and the ping retries on the next tick.
+
 ## \[0.2.1] - 2026-06-04
 
 ### Added
