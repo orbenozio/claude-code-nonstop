@@ -1,5 +1,11 @@
 # Changelog
 
+## \[Unreleased]
+
+### Fixed
+
+* **The "5-hour limit" notice is now recognised as a rate limit.** Claude Code now words the notice "You've hit your 5-hour limit · resets 8pm (America/Sao_Paulo)", which none of the strict patterns matched (the qualifier list was `session|usage|rate`), so `detectRateLimit()` returned null and the shift kept pinging into the limit instead of sleeping. The qualifier is now any one or two words, the pattern still requires the full "hit your … limit … resets <time>" structure, and the loose "N-hour / weekly / Opus / Sonnet" forms are flagged too.
+
 ## \[0.5.0] - 2026-06-15
 
 ### Added
