@@ -300,18 +300,23 @@
     // Action buttons live in this container; the FIRST one is the safe "Yes" (allow
     // once), not "Yes, for all projects". Used to auto-approve when onPermission=approve.
     popupButtons: '[class*="buttonContainer_"] button',
-    // Real format (captured live): "You've hit your session limit · resets 10:10pm (Asia/Jerusalem)".
+    // Real formats (captured live): "You've hit your session limit · resets 10:10pm (Asia/Jerusalem)"
+    // and, newer: "You've hit your 5-hour limit · resets 8pm (America/Sao_Paulo)".
     // ⚠ These are the ONLY patterns allowed to put a shift to sleep, so they must NOT
     // match ordinary conversation that merely *mentions* a limit or a reset time (a
     // bare "resets 10:10pm" in chat — e.g. while debugging this very feature — used to
     // false-trigger a silent multi-hour sleep). Each one therefore requires the canonical
-    // "hit/reached your <session|usage|rate> limit" NOTICE structure. The first also
-    // captures the reset time (m[1]) for parseResetTime; the others flag a limit and let
-    // enterSleep() extract the time via resetTimeRegexes below.
+    // "hit/reached your <session|usage|rate|N-hour|weekly…> limit" NOTICE structure. The
+    // first also captures the reset time (m[1]) for parseResetTime; the others flag a limit
+    // and let enterSleep() extract the time via resetTimeRegexes below.
+    // The qualifier is deliberately open (1–2 words) because Claude re-words it over time:
+    // "session limit" became "5-hour limit". The first pattern still requires the full
+    // "hit your … limit … resets <time>" structure, so chat that merely mentions a limit
+    // can't trip it.
     rateLimitRegexes: [
-      /hit your (?:session|usage|rate) limit[\s\S]{0,80}?resets?\s+(\d{1,2}(?::\d{2})?\s*[ap]m\b(?:\s*\([^)]+\))?)/i,
+      /hit your (?:[\w-]+\s+){0,2}?limit[\s\S]{0,80}?resets?\s+(\d{1,2}(?::\d{2})?\s*[ap]m\b(?:\s*\([^)]+\))?)/i,
       /\b\d+\s*-?\s*hour limit reached/i,
-      /(?:hit|reached)[^\n]{0,30}\b(?:session|usage|rate) limit/i,
+      /(?:hit|reached)[^\n]{0,30}\b(?:session|usage|rate|weekly|opus|sonnet|\d+[\s-]*hour) limit/i,
     ],
     // Loose time extractors — used ONLY to pull a reset time AFTER a notice above has
     // already confirmed a real limit. Never trigger sleep on their own (that's the bug

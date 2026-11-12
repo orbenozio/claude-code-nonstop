@@ -230,6 +230,17 @@ test('a REAL "session limit" notice still reads as rate-limited (the guard did n
   assert.strictEqual(h.debug.state(), 'RATE_LIMITED', 'and still drive RATE_LIMITED');
 });
 
+test('the newer "5-hour limit" notice reads as rate-limited and captures its reset time', () => {
+  const h = load({ transcriptText: "You've hit your 5-hour limit · resets 8pm (America/Sao_Paulo)" });
+  assert.strictEqual(h.debug.state(), 'RATE_LIMITED', 'must drive RATE_LIMITED, not keep pinging into the wall');
+  assert.strictEqual(h.debug.rateLimit().captured, '8pm (America/Sao_Paulo)');
+});
+
+test('chat that merely mentions a "5-hour limit" does NOT drive RATE_LIMITED', () => {
+  const h = load({ transcriptText: 'We should handle the 5-hour limit better; it resets at some point.' });
+  assert.notStrictEqual(h.debug.state(), 'RATE_LIMITED', 'a mention is not a notice');
+});
+
 console.log('\nwebview behaviour — per-conversation shift state (independent windows)');
 
 function sessionMsg(id, title) {

@@ -192,6 +192,18 @@ test('detects the real session-limit notice and captures the time', () => {
   assert.ok(r && r.matched, 'should detect');
   assert.strictEqual(r.captured, '10:10pm (Asia/Jerusalem)');
 });
+test('detects the newer "5-hour limit" notice (captures the time when it has minutes)', () => {
+  const r = detectRateLimit("You've hit your 5-hour limit · resets 8:00pm (America/Sao_Paulo)");
+  assert.ok(r && r.matched, 'should detect');
+  assert.strictEqual(r.captured, '8:00pm (America/Sao_Paulo)');
+});
+test('detects the "5-hour limit" notice even with an hour-only reset time', () => {
+  const r = detectRateLimit("You've hit your 5-hour limit · resets 8pm (America/Sao_Paulo)");
+  assert.ok(r && r.matched, 'must flag the limit (time extraction is the webview parser job)');
+});
+test('chat that merely mentions a "5-hour limit" is not a rate limit', () => {
+  assert.strictEqual(detectRateLimit('We should handle the 5-hour limit better; it resets at some point.'), null);
+});
 test('detects a bare limit mention (no time) → captured null', () => {
   const r = detectRateLimit('Sorry, you have hit your usage limit for now.');
   assert.ok(r && r.matched);
@@ -259,7 +271,7 @@ test('unparseable input → 0', () => {
 console.log('\nwebview parity (drift guard)');
 test('webview embeds the canonical primary rate-limit regex', () => {
   const src = fs.readFileSync(path.join(__dirname, '..', 'webview', 'nonstop.js'), 'utf8');
-  assert.ok(src.indexOf('hit your (?:session|usage|rate) limit') !== -1,
+  assert.ok(src.indexOf('hit your (?:[\\w-]+\\s+){0,2}?limit') !== -1,
     'webview/nonstop.js must keep the primary regex in sync with src/ratelimit/resetTime.js');
 });
 test('webview keeps the trigger/extractor split (loose reset-time patterns are NOT triggers)', () => {
